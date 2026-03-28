@@ -142,11 +142,13 @@ async function openFileDialog() {
       { name: 'PowerPoint Files', extensions: ['pptx', 'ppt'] },
       { name: 'All Files', extensions: ['*'] },
     ],
-    properties: ['openFile'],
+    properties: ['openFile', 'multiSelections'],
   });
 
   if (!result.canceled && result.filePaths.length > 0) {
-    mainWindow.webContents.send('open-file', result.filePaths[0]);
+    for (const filePath of result.filePaths) {
+      mainWindow.webContents.send('open-file', filePath);
+    }
   }
 }
 
