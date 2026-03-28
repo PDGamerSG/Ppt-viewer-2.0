@@ -1,72 +1,90 @@
 (function () {
   'use strict';
 
-  const { loadDocument, renderSlide, renderThumbnail, cleanup } = window.PdfRenderer;
+  var PdfRenderer = window.PdfRenderer;
 
-  // State
-  let currentSlide = 1;
-  let totalSlides = 0;
-  let zoomLevel = 1;
-  let currentFilePath = null;
-  let isFullscreen = false;
-  let fsCounterTimeout = null;
-  let resizeTimeout = null;
-  let libreOfficeReady = false;
+  // ---- Multi-tab state ----
+  // Each tab: { id, filePath, fileName, pdfData, currentSlide, totalSlides, zoomLevel, thumbnailsHtml }
+  var tabs = [];
+  var activeTabId = null;
+  var tabIdCounter = 0;
+  var sidebarVisible = true;
+
+  // Per-tab PDF documents (keyed by tab id)
+  var tabDocs = {};
+
+  // Global
+  var isFullscreen = false;
+  var fsCounterTimeout = null;
+  var resizeTimeout = null;
+  var libreOfficeReady = false;
 
   // DOM Elements
-  const loadingOverlay = document.getElementById('loading-overlay');
-  const errorOverlay = document.getElementById('error-overlay');
-  const errorMessage = document.getElementById('error-message');
-  const errorRetryBtn = document.getElementById('error-retry-btn');
-  const errorCloseBtn = document.getElementById('error-close-btn');
-  const loScreen = document.getElementById('libreoffice-screen');
-  const welcomeScreen = document.getElementById('welcome-screen');
-  const viewer = document.getElementById('viewer');
-  const slideCanvas = document.getElementById('slide-canvas');
-  const thumbnailList = document.getElementById('thumbnail-list');
-  const recentList = document.getElementById('recent-list');
-  const fsCounter = document.getElementById('fs-counter');
+  var loadingOverlay = document.getElementById('loading-overlay');
+  var errorOverlay = document.getElementById('error-overlay');
+  var errorMessage = document.getElementById('error-message');
+  var errorRetryBtn = document.getElementById('error-retry-btn');
+  var errorCloseBtn = document.getElementById('error-close-btn');
+  var loScreen = document.getElementById('libreoffice-screen');
+  var welcomeScreen = document.getElementById('welcome-screen');
+  var viewer = document.getElementById('viewer');
+  var slideCanvas = document.getElementById('slide-canvas');
+  var thumbnailList = document.getElementById('thumbnail-list');
+  var recentList = document.getElementById('recent-list');
+  var fsCounter = document.getElementById('fs-counter');
+
+  // Tab bar
+  var tabList = document.getElementById('tab-list');
+  var tabOpenBtn = document.getElementById('tab-open-btn');
 
   // Toolbar
-  const toolbarOpen = document.getElementById('toolbar-open');
-  const toolbarPrev = document.getElementById('toolbar-prev');
-  const toolbarNext = document.getElementById('toolbar-next');
-  const toolbarSlideCounter = document.getElementById('toolbar-slide-counter');
-  const toolbarZoomIn = document.getElementById('toolbar-zoom-in');
-  const toolbarZoomOut = document.getElementById('toolbar-zoom-out');
-  const toolbarZoomReset = document.getElementById('toolbar-zoom-reset');
-  const toolbarZoom = document.getElementById('toolbar-zoom');
-  const toolbarPresent = document.getElementById('toolbar-present');
-
-  // Status bar
-  const statusFilename = document.getElementById('status-filename');
-  const statusSlide = document.getElementById('status-slide');
-  const statusZoom = document.getElementById('status-zoom');
-  const statusLoDot = document.querySelector('.lo-dot');
-  const statusLoText = document.getElementById('status-lo-text');
+  var toolbarOpen = document.getElementById('toolbar-open');
+  var toolbarToggleSidebar = document.getElementById('toolbar-toggle-sidebar');
+  var toolbarPrev = document.getElementById('toolbar-prev');
+  var toolbarNext = document.getElementById('toolbar-next');
+  var toolbarSlideCounter = document.getElementById('toolbar-slide-counter');
+  var toolbarZoomIn = document.getElementById('toolbar-zoom-in');
+  var toolbarZoomOut = document.getElementById('toolbar-zoom-out');
+  var toolbarZoomReset = document.getElementById('toolbar-zoom-reset');
+  var toolbarZoom = document.getElementById('toolbar-zoom');
+  var toolbarPresent = document.getElementById('toolbar-present');
 
   // Welcome screen
-  const dropZone = document.getElementById('drop-zone');
-  const welcomeOpenBtn = document.getElementById('welcome-open-btn');
+  var dropZone = document.getElementById('drop-zone');
+  var welcomeOpenBtn = document.getElementById('welcome-open-btn');
 
   // LibreOffice screen
-  const downloadLoBtn = document.getElementById('download-lo-btn');
-  const refreshLoBtn = document.getElementById('refresh-lo-btn');
-  const loPathInput = document.getElementById('lo-path-input');
-  const loPathSaveBtn = document.getElementById('lo-path-save-btn');
+  var downloadLoBtn = document.getElementById('download-lo-btn');
+  var refreshLoBtn = document.getElementById('refresh-lo-btn');
+  var loPathInput = document.getElementById('lo-path-input');
+  var loPathSaveBtn = document.getElementById('lo-path-save-btn');
 
-  // Initialize
+  // ---- Helpers ----
+  function getActiveTab() {
+    for (var i = 0; i < tabs.length; i++) {
+      if (tabs[i].id === activeTabId) return tabs[i];
+    }
+    return null;
+  }
+
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  }
+
+  function extractFileName(filePath) {
+    return filePath.replace(/\\/g, '/').split('/').pop();
+  }
+
+  // ---- Init ----
   async function init() {
-    const loPath = await window.api.detectLibreOffice();
+    var loPath = await window.api.detectLibreOffice();
     if (loPath) {
       libreOfficeReady = true;
-      statusLoDot.classList.add('ready');
-      statusLoText.textContent = 'LibreOffice Ready';
       showWelcome();
     } else {
       libreOfficeReady = false;
-      statusLoDot.classList.add('missing');
-      statusLoText.textContent = 'Not Found';
       showLibreOfficeScreen();
     }
 
@@ -81,21 +99,13 @@
     screen.classList.remove('hidden');
   }
 
-  function showLibreOfficeScreen() {
-    showScreen(loScreen);
-  }
+  function showLibreOfficeScreen() { showScreen(loScreen); }
+  function showWelcome() { showScreen(welcomeScreen); }
+  function showViewer() { showScreen(viewer); }
 
-  function showWelcome() {
-    showScreen(welcomeScreen);
-  }
-
-  function showViewer() {
-    showScreen(viewer);
-  }
-
-  // Recent files
+  // ---- Recent files ----
   async function loadRecentFiles() {
-    const files = await window.api.getRecentFiles();
+    var files = await window.api.getRecentFiles();
     recentList.innerHTML = '';
 
     if (files.length === 0) {
@@ -105,58 +115,173 @@
 
     document.getElementById('recent-files').classList.remove('hidden');
 
-    for (const file of files) {
-      const li = document.createElement('li');
-      const date = new Date(file.openedAt);
-      const dateStr = date.toLocaleDateString();
-
-      li.innerHTML =
-        '<div>' +
-          '<div class="recent-file-name">' + escapeHtml(file.name) + '</div>' +
-          '<div class="recent-file-path">' + escapeHtml(file.path) + '</div>' +
-        '</div>' +
-        '<div class="recent-file-date">' + dateStr + '</div>';
-
-      li.addEventListener('click', function () { openFile(file.path); });
-      recentList.appendChild(li);
+    for (var i = 0; i < files.length; i++) {
+      (function (file) {
+        var li = document.createElement('li');
+        var date = new Date(file.openedAt);
+        var dateStr = date.toLocaleDateString();
+        li.innerHTML =
+          '<div>' +
+            '<div class="recent-file-name">' + escapeHtml(file.name) + '</div>' +
+            '<div class="recent-file-path">' + escapeHtml(file.path) + '</div>' +
+          '</div>' +
+          '<div class="recent-file-date">' + dateStr + '</div>';
+        li.addEventListener('click', function () { openFile(file.path); });
+        recentList.appendChild(li);
+      })(files[i]);
     }
   }
 
-  function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+  // ---- Tab bar rendering ----
+  function renderTabs() {
+    tabList.innerHTML = '';
+    for (var i = 0; i < tabs.length; i++) {
+      (function (tab) {
+        var el = document.createElement('div');
+        el.className = 'tab-item' + (tab.id === activeTabId ? ' active' : '');
+        el.innerHTML =
+          '<span class="tab-item-name">' + escapeHtml(tab.fileName) + '</span>' +
+          '<span class="tab-close" title="Close tab">&times;</span>';
+
+        // Click tab to switch
+        el.addEventListener('click', function (e) {
+          if (e.target.classList.contains('tab-close')) return;
+          switchTab(tab.id);
+        });
+
+        // Close tab
+        el.querySelector('.tab-close').addEventListener('click', function (e) {
+          e.stopPropagation();
+          closeTab(tab.id);
+        });
+
+        tabList.appendChild(el);
+      })(tabs[i]);
+    }
   }
 
-  // File opening
+  // ---- Tab management ----
+  function switchTab(tabId) {
+    if (activeTabId === tabId) return;
+
+    // Save current tab state (thumbnails HTML)
+    var current = getActiveTab();
+    if (current) {
+      current.thumbnailsHtml = thumbnailList.innerHTML;
+    }
+
+    activeTabId = tabId;
+    var tab = getActiveTab();
+    if (!tab) return;
+
+    renderTabs();
+    restoreTab(tab);
+  }
+
+  async function restoreTab(tab) {
+    // Reload the PDF document for this tab
+    PdfRenderer.cleanup();
+    await PdfRenderer.loadDocument(tab.pdfData);
+
+    // Restore thumbnails
+    if (tab.thumbnailsHtml) {
+      thumbnailList.innerHTML = tab.thumbnailsHtml;
+      // Re-bind click events on thumbnails
+      var items = thumbnailList.querySelectorAll('.thumbnail-item');
+      items.forEach(function (item) {
+        var page = parseInt(item.dataset.page);
+        item.addEventListener('click', function () { goToSlide(page); });
+      });
+    } else {
+      renderAllThumbnails(tab);
+    }
+
+    updateSlideCounter();
+    updateZoomDisplay();
+    window.api.setTitle(tab.fileName + ' \u2014 PPT Viewer');
+    renderCurrentSlide();
+  }
+
+  function closeTab(tabId) {
+    var idx = -1;
+    for (var i = 0; i < tabs.length; i++) {
+      if (tabs[i].id === tabId) { idx = i; break; }
+    }
+    if (idx === -1) return;
+
+    tabs.splice(idx, 1);
+
+    if (tabs.length === 0) {
+      activeTabId = null;
+      PdfRenderer.cleanup();
+      showWelcome();
+      loadRecentFiles();
+      return;
+    }
+
+    // If we closed the active tab, switch to nearest
+    if (activeTabId === tabId) {
+      var newIdx = Math.min(idx, tabs.length - 1);
+      activeTabId = tabs[newIdx].id;
+      renderTabs();
+      restoreTab(tabs[newIdx]);
+    } else {
+      renderTabs();
+    }
+  }
+
+  // ---- File opening ----
   async function openFile(filePath) {
     if (!libreOfficeReady) return;
 
-    currentFilePath = filePath;
-    const parts = filePath.replace(/\\/g, '/').split('/');
-    const fileName = parts[parts.length - 1];
+    // Check if already open in a tab
+    for (var i = 0; i < tabs.length; i++) {
+      if (tabs[i].filePath === filePath) {
+        switchTab(tabs[i].id);
+        return;
+      }
+    }
 
+    var fileName = extractFileName(filePath);
     loadingOverlay.classList.remove('hidden');
 
     try {
-      const pdfPath = await window.api.convertFile(filePath);
-      const data = await window.api.readFile(pdfPath);
+      var pdfPath = await window.api.convertFile(filePath);
+      var data = await window.api.readFile(pdfPath);
 
-      cleanup();
-      totalSlides = await loadDocument(data);
-      currentSlide = 1;
-      zoomLevel = 1;
+      PdfRenderer.cleanup();
+      var numPages = await PdfRenderer.loadDocument(data);
+
+      var tab = {
+        id: ++tabIdCounter,
+        filePath: filePath,
+        fileName: fileName,
+        pdfData: data,
+        currentSlide: 1,
+        totalSlides: numPages,
+        zoomLevel: 1,
+        thumbnailsHtml: null,
+      };
+
+      // Save current tab thumbnails before switching
+      var current = getActiveTab();
+      if (current) {
+        current.thumbnailsHtml = thumbnailList.innerHTML;
+      }
+
+      tabs.push(tab);
+      activeTabId = tab.id;
 
       await window.api.saveRecentFile(filePath, fileName);
 
       showViewer();
+      renderTabs();
       updateSlideCounter();
       updateZoomDisplay();
-      statusFilename.textContent = fileName;
-      await window.api.setTitle(fileName + ' \u2014 PPT Viewer');
+      window.api.setTitle(fileName + ' \u2014 PPT Viewer');
 
       await renderCurrentSlide();
-      renderAllThumbnails();
+      renderAllThumbnails(tab);
     } catch (err) {
       showError(err.message || String(err));
     } finally {
@@ -169,45 +294,39 @@
     errorOverlay.classList.remove('hidden');
   }
 
-  // Slide rendering
+  // ---- Slide rendering ----
   async function renderCurrentSlide() {
-    if (totalSlides === 0) return;
+    var tab = getActiveTab();
+    if (!tab || tab.totalSlides === 0) return;
 
-    const mainView = document.getElementById('main-view');
-    const maxWidth = mainView.clientWidth - 40;
-    const maxHeight = mainView.clientHeight - 40;
+    var mainView = document.getElementById('main-view');
+    var maxWidth = mainView.clientWidth - 40;
+    var maxHeight = mainView.clientHeight - 40;
 
-    // Get base page dimensions
-    const tempCanvas = document.createElement('canvas');
-    const tempResult = await renderSlide(tempCanvas, currentSlide, 1);
+    var tempCanvas = document.createElement('canvas');
+    var tempResult = await PdfRenderer.renderSlide(tempCanvas, tab.currentSlide, 1);
     if (!tempResult) return;
 
-    const baseWidth = tempResult.width;
-    const baseHeight = tempResult.height;
+    var fitScale = Math.min(maxWidth / tempResult.width, maxHeight / tempResult.height);
+    var effectiveZoom = fitScale * tab.zoomLevel;
 
-    // Calculate fit scale
-    const fitScale = Math.min(maxWidth / baseWidth, maxHeight / baseHeight);
-    const effectiveZoom = fitScale * zoomLevel;
-
-    await renderSlide(slideCanvas, currentSlide, effectiveZoom);
+    await PdfRenderer.renderSlide(slideCanvas, tab.currentSlide, effectiveZoom);
     updateSlideCounter();
     updateThumbnailHighlight();
   }
 
-  async function renderAllThumbnails() {
+  async function renderAllThumbnails(tab) {
     thumbnailList.innerHTML = '';
 
-    for (let i = 1; i <= totalSlides; i++) {
-      const item = document.createElement('div');
-      item.className = 'thumbnail-item' + (i === currentSlide ? ' active' : '');
+    for (var i = 1; i <= tab.totalSlides; i++) {
+      var item = document.createElement('div');
+      item.className = 'thumbnail-item' + (i === tab.currentSlide ? ' active' : '');
       item.dataset.page = i;
 
-      const canvas = await renderThumbnail(i, 160);
-      if (canvas) {
-        item.appendChild(canvas);
-      }
+      var canvas = await PdfRenderer.renderThumbnail(i, 160);
+      if (canvas) item.appendChild(canvas);
 
-      const num = document.createElement('span');
+      var num = document.createElement('span');
       num.className = 'thumbnail-number';
       num.textContent = i;
       item.appendChild(num);
@@ -218,78 +337,106 @@
 
       thumbnailList.appendChild(item);
     }
+
+    tab.thumbnailsHtml = thumbnailList.innerHTML;
   }
 
   function updateThumbnailHighlight() {
-    const items = thumbnailList.querySelectorAll('.thumbnail-item');
+    var tab = getActiveTab();
+    if (!tab) return;
+
+    var items = thumbnailList.querySelectorAll('.thumbnail-item');
     items.forEach(function (item) {
       var page = parseInt(item.dataset.page);
-      if (page === currentSlide) {
+      if (page === tab.currentSlide) {
         item.classList.add('active');
       } else {
         item.classList.remove('active');
       }
     });
 
-    // Scroll active into view
     var active = thumbnailList.querySelector('.thumbnail-item.active');
     if (active) {
       active.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     }
   }
 
-  // Navigation
+  // ---- Navigation ----
   function goToSlide(num) {
-    if (num < 1 || num > totalSlides) return;
-    currentSlide = num;
+    var tab = getActiveTab();
+    if (!tab || num < 1 || num > tab.totalSlides) return;
+    tab.currentSlide = num;
     renderCurrentSlide();
     showFsCounter();
   }
 
   function prevSlide() {
-    goToSlide(currentSlide - 1);
+    var tab = getActiveTab();
+    if (tab) goToSlide(tab.currentSlide - 1);
   }
 
   function nextSlide() {
-    goToSlide(currentSlide + 1);
+    var tab = getActiveTab();
+    if (tab) goToSlide(tab.currentSlide + 1);
   }
 
-  // Zoom
+  // ---- Zoom ----
   function setZoom(level) {
-    zoomLevel = Math.max(0.25, Math.min(4, level));
+    var tab = getActiveTab();
+    if (!tab) return;
+    tab.zoomLevel = Math.max(0.25, Math.min(4, level));
     updateZoomDisplay();
     renderCurrentSlide();
   }
 
   function zoomIn() {
-    setZoom(zoomLevel + 0.1);
+    var tab = getActiveTab();
+    if (tab) setZoom(tab.zoomLevel + 0.1);
   }
 
   function zoomOut() {
-    setZoom(zoomLevel - 0.1);
+    var tab = getActiveTab();
+    if (tab) setZoom(tab.zoomLevel - 0.1);
   }
 
-  function zoomReset() {
-    setZoom(1);
-  }
+  function zoomReset() { setZoom(1); }
 
   function updateZoomDisplay() {
-    var pct = Math.round(zoomLevel * 100) + '%';
+    var tab = getActiveTab();
+    var pct = tab ? Math.round(tab.zoomLevel * 100) + '%' : '100%';
     toolbarZoom.textContent = pct;
-    statusZoom.textContent = pct;
   }
 
-  // Slide counter
+  // ---- Slide counter ----
   function updateSlideCounter() {
-    var text = 'Slide ' + currentSlide + ' of ' + totalSlides;
+    var tab = getActiveTab();
+    if (!tab) {
+      toolbarSlideCounter.textContent = 'Slide 0 of 0';
+      fsCounter.textContent = 'Slide 0 of 0';
+      return;
+    }
+    var text = 'Slide ' + tab.currentSlide + ' of ' + tab.totalSlides;
     toolbarSlideCounter.textContent = text;
-    statusSlide.textContent = text;
     fsCounter.textContent = text;
   }
 
-  // Fullscreen
+  // ---- Sidebar toggle ----
+  function toggleSidebar() {
+    sidebarVisible = !sidebarVisible;
+    var sidebar = document.getElementById('sidebar');
+    if (sidebarVisible) {
+      sidebar.classList.remove('sidebar-hidden');
+    } else {
+      sidebar.classList.add('sidebar-hidden');
+    }
+    // Re-render slide to fill new space
+    setTimeout(function () { renderCurrentSlide(); }, 50);
+  }
+
+  // ---- Fullscreen ----
   async function toggleFullscreen() {
-    if (totalSlides === 0) return;
+    var tab = getActiveTab();
+    if (!tab || tab.totalSlides === 0) return;
 
     isFullscreen = !isFullscreen;
     if (isFullscreen) {
@@ -316,10 +463,12 @@
     }, 2000);
   }
 
-  // Event Listeners
+  // ---- Event Listeners ----
   function setupEventListeners() {
     // Toolbar
     toolbarOpen.addEventListener('click', function () { window.api.openFileDialog(); });
+    tabOpenBtn.addEventListener('click', function () { window.api.openFileDialog(); });
+    toolbarToggleSidebar.addEventListener('click', toggleSidebar);
     toolbarPrev.addEventListener('click', prevSlide);
     toolbarNext.addEventListener('click', nextSlide);
     toolbarZoomIn.addEventListener('click', zoomIn);
@@ -333,7 +482,8 @@
     // Error
     errorRetryBtn.addEventListener('click', function () {
       errorOverlay.classList.add('hidden');
-      if (currentFilePath) openFile(currentFilePath);
+      var tab = getActiveTab();
+      if (tab) openFile(tab.filePath);
     });
     errorCloseBtn.addEventListener('click', function () {
       errorOverlay.classList.add('hidden');
@@ -348,9 +498,6 @@
       var loPath = await window.api.detectLibreOffice();
       if (loPath) {
         libreOfficeReady = true;
-        statusLoDot.classList.remove('missing');
-        statusLoDot.classList.add('ready');
-        statusLoText.textContent = 'LibreOffice Ready';
         showWelcome();
         loadRecentFiles();
       }
@@ -363,26 +510,26 @@
         var loPath = await window.api.detectLibreOffice();
         if (loPath) {
           libreOfficeReady = true;
-          statusLoDot.classList.remove('missing');
-          statusLoDot.classList.add('ready');
-          statusLoText.textContent = 'LibreOffice Ready';
           showWelcome();
           loadRecentFiles();
         }
       }
     });
 
-    // Keyboard navigation
+    // Keyboard navigation — now includes ArrowUp and ArrowDown
     document.addEventListener('keydown', function (e) {
-      if (totalSlides === 0) return;
+      var tab = getActiveTab();
+      if (!tab || tab.totalSlides === 0) return;
 
       switch (e.key) {
         case 'ArrowLeft':
+        case 'ArrowUp':
         case 'PageUp':
           e.preventDefault();
           prevSlide();
           break;
         case 'ArrowRight':
+        case 'ArrowDown':
         case 'PageDown':
           e.preventDefault();
           nextSlide();
@@ -402,12 +549,14 @@
 
     // Click on main slide to advance
     slideCanvas.addEventListener('click', function () {
-      if (totalSlides > 0) nextSlide();
+      var tab = getActiveTab();
+      if (tab && tab.totalSlides > 0) nextSlide();
     });
 
     // Ctrl+Scroll zoom
     document.getElementById('main-view').addEventListener('wheel', function (e) {
-      if (e.ctrlKey && totalSlides > 0) {
+      var tab = getActiveTab();
+      if (e.ctrlKey && tab && tab.totalSlides > 0) {
         e.preventDefault();
         if (e.deltaY < 0) zoomIn();
         else zoomOut();
@@ -418,7 +567,8 @@
     window.addEventListener('resize', function () {
       clearTimeout(resizeTimeout);
       resizeTimeout = setTimeout(function () {
-        if (totalSlides > 0) renderCurrentSlide();
+        var tab = getActiveTab();
+        if (tab && tab.totalSlides > 0) renderCurrentSlide();
       }, 150);
     });
 
