@@ -4,14 +4,12 @@
   var PdfRenderer = window.PdfRenderer;
 
   // ---- Multi-tab state ----
-  // Each tab: { id, filePath, fileName, pdfData, currentSlide, totalSlides, zoomLevel, thumbnailsHtml }
+  // Each tab: { id, filePath, fileName, pdfData, currentSlide, totalSlides, zoomLevel,
+  //             thumbnailDataUrls: [], comments: null|{slideNum:[...]}, commentsVisible }
   var tabs = [];
   var activeTabId = null;
   var tabIdCounter = 0;
   var sidebarVisible = true;
-
-  // Per-tab PDF documents (keyed by tab id)
-  var tabDocs = {};
 
   // Global
   var isFullscreen = false;
@@ -48,6 +46,12 @@
   var toolbarZoomReset = document.getElementById('toolbar-zoom-reset');
   var toolbarZoom = document.getElementById('toolbar-zoom');
   var toolbarPresent = document.getElementById('toolbar-present');
+  var toolbarComments = document.getElementById('toolbar-comments');
+
+  // Comments panel
+  var commentsPanel = document.getElementById('comments-panel');
+  var commentsList = document.getElementById('comments-list');
+  var commentsClose = document.getElementById('comments-close');
 
   // Welcome screen
   var dropZone = document.getElementById('drop-zone');
@@ -143,13 +147,11 @@
           '<span class="tab-item-name">' + escapeHtml(tab.fileName) + '</span>' +
           '<span class="tab-close" title="Close tab">&times;</span>';
 
-        // Click tab to switch
         el.addEventListener('click', function (e) {
           if (e.target.classList.contains('tab-close')) return;
           switchTab(tab.id);
         });
 
-        // Close tab
         el.querySelector('.tab-close').addEventListener('click', function (e) {
           e.stopPropagation();
           closeTab(tab.id);
@@ -177,13 +179,46 @@
     PdfRenderer.cleanup();
     await PdfRenderer.loadDocument(tab.pdfData);
 
-    // Always re-render thumbnails fresh (canvas pixels don't survive innerHTML)
-    await renderAllThumbnails(tab);
+    // Restore thumbnails from cached data URLs (instant) or render fresh
+    if (tab.thumbnailDataUrls && tab.thumbnailDataUrls.length === tab.totalSlides) {
+      restoreThumbnailsFromCache(tab);
+    } else {
+      await renderAllThumbnails(tab);
+    }
 
     updateSlideCounter();
     updateZoomDisplay();
+    updateCommentsUI(tab);
     window.api.setTitle(tab.fileName + ' \u2014 PPT Viewer');
     await renderCurrentSlide();
+  }
+
+  function restoreThumbnailsFromCache(tab) {
+    thumbnailList.innerHTML = '';
+    for (var i = 0; i < tab.thumbnailDataUrls.length; i++) {
+      var pageNum = i + 1;
+      var item = document.createElement('div');
+      item.className = 'thumbnail-item' + (pageNum === tab.currentSlide ? ' active' : '');
+      item.dataset.page = pageNum;
+
+      var img = document.createElement('img');
+      img.src = tab.thumbnailDataUrls[i];
+      img.style.width = '100%';
+      img.style.height = 'auto';
+      img.style.display = 'block';
+      item.appendChild(img);
+
+      var num = document.createElement('span');
+      num.className = 'thumbnail-number';
+      num.textContent = pageNum;
+      item.appendChild(num);
+
+      (function (pn) {
+        item.addEventListener('click', function () { goToSlide(pn); });
+      })(pageNum);
+
+      thumbnailList.appendChild(item);
+    }
   }
 
   function closeTab(tabId) {
@@ -198,12 +233,13 @@
     if (tabs.length === 0) {
       activeTabId = null;
       PdfRenderer.cleanup();
+      commentsPanel.classList.add('hidden');
+      toolbarComments.classList.add('hidden');
       showWelcome();
       loadRecentFiles();
       return;
     }
 
-    // If we closed the active tab, switch to nearest
     if (activeTabId === tabId) {
       var newIdx = Math.min(idx, tabs.length - 1);
       activeTabId = tabs[newIdx].id;
@@ -230,7 +266,12 @@
     loadingOverlay.classList.remove('hidden');
 
     try {
-      var pdfPath = await window.api.convertFile(filePath);
+      // Start conversion and comment extraction in parallel
+      var pdfPromise = window.api.convertFile(filePath);
+      var commentsPromise = window.api.extractComments(filePath);
+
+      var pdfPath = await pdfPromise;
+      var comments = await commentsPromise;
       var data = await window.api.readFile(pdfPath);
 
       PdfRenderer.cleanup();
@@ -244,6 +285,9 @@
         currentSlide: 1,
         totalSlides: numPages,
         zoomLevel: 1,
+        thumbnailDataUrls: [],
+        comments: comments,
+        commentsVisible: false,
       };
 
       tabs.push(tab);
@@ -255,9 +299,11 @@
       renderTabs();
       updateSlideCounter();
       updateZoomDisplay();
+      updateCommentsUI(tab);
       window.api.setTitle(fileName + ' \u2014 PPT Viewer');
 
       await renderCurrentSlide();
+      // Render thumbnails in background and cache data URLs
       renderAllThumbnails(tab);
     } catch (err) {
       showError(err.message || String(err));
@@ -290,10 +336,12 @@
     await PdfRenderer.renderSlide(slideCanvas, tab.currentSlide, effectiveZoom);
     updateSlideCounter();
     updateThumbnailHighlight();
+    renderCommentsForSlide(tab);
   }
 
   async function renderAllThumbnails(tab) {
     thumbnailList.innerHTML = '';
+    tab.thumbnailDataUrls = [];
 
     for (var i = 1; i <= tab.totalSlides; i++) {
       var item = document.createElement('div');
@@ -301,7 +349,13 @@
       item.dataset.page = i;
 
       var canvas = await PdfRenderer.renderThumbnail(i, 160);
-      if (canvas) item.appendChild(canvas);
+      if (canvas) {
+        // Cache as data URL for instant restore on tab switch
+        tab.thumbnailDataUrls.push(canvas.toDataURL('image/png'));
+        item.appendChild(canvas);
+      } else {
+        tab.thumbnailDataUrls.push('');
+      }
 
       var num = document.createElement('span');
       num.className = 'thumbnail-number';
@@ -333,6 +387,79 @@
     var active = thumbnailList.querySelector('.thumbnail-item.active');
     if (active) {
       active.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+
+  // ---- Comments ----
+  function updateCommentsUI(tab) {
+    if (tab.comments) {
+      toolbarComments.classList.remove('hidden');
+      if (tab.commentsVisible) {
+        commentsPanel.classList.remove('hidden');
+      } else {
+        commentsPanel.classList.add('hidden');
+      }
+      renderCommentsForSlide(tab);
+    } else {
+      toolbarComments.classList.add('hidden');
+      commentsPanel.classList.add('hidden');
+    }
+  }
+
+  function toggleComments() {
+    var tab = getActiveTab();
+    if (!tab || !tab.comments) return;
+
+    tab.commentsVisible = !tab.commentsVisible;
+    if (tab.commentsVisible) {
+      commentsPanel.classList.remove('hidden');
+      renderCommentsForSlide(tab);
+    } else {
+      commentsPanel.classList.add('hidden');
+    }
+    // Re-render slide to adjust for panel width
+    setTimeout(function () { renderCurrentSlide(); }, 50);
+  }
+
+  function renderCommentsForSlide(tab) {
+    if (!tab || !tab.comments || !tab.commentsVisible) return;
+
+    var slideComments = tab.comments[tab.currentSlide];
+    commentsList.innerHTML = '';
+
+    if (!slideComments || slideComments.length === 0) {
+      commentsList.innerHTML = '<div class="comments-empty">No comments on this slide</div>';
+      return;
+    }
+
+    for (var i = 0; i < slideComments.length; i++) {
+      var c = slideComments[i];
+      var div = document.createElement('div');
+      div.className = 'comment-item';
+
+      var authorDiv = document.createElement('div');
+      authorDiv.className = 'comment-author';
+      authorDiv.textContent = c.author;
+      div.appendChild(authorDiv);
+
+      var textDiv = document.createElement('div');
+      textDiv.className = 'comment-text';
+      textDiv.textContent = c.text;
+      div.appendChild(textDiv);
+
+      if (c.date) {
+        var dateDiv = document.createElement('div');
+        dateDiv.className = 'comment-date';
+        try {
+          var d = new Date(c.date);
+          dateDiv.textContent = d.toLocaleDateString() + ' ' + d.toLocaleTimeString();
+        } catch (_) {
+          dateDiv.textContent = c.date;
+        }
+        div.appendChild(dateDiv);
+      }
+
+      commentsList.appendChild(div);
     }
   }
 
@@ -425,10 +552,9 @@
   // ---- Clear cache ----
   async function clearCache() {
     await window.api.clearCache();
-    // Brief visual feedback
     var btn = document.getElementById('toolbar-clear-cache');
     var original = btn.innerHTML;
-    btn.innerHTML = '<span>✓</span> Cleared';
+    btn.innerHTML = '<span>\u2713</span> Cleared';
     setTimeout(function () { btn.innerHTML = original; }, 1500);
   }
 
@@ -441,7 +567,6 @@
     } else {
       sidebar.classList.add('sidebar-hidden');
     }
-    // Re-render slide to fill new space
     setTimeout(function () { renderCurrentSlide(); }, 50);
   }
 
@@ -487,6 +612,8 @@
     toolbarZoomOut.addEventListener('click', zoomOut);
     toolbarZoomReset.addEventListener('click', zoomReset);
     toolbarPresent.addEventListener('click', toggleFullscreen);
+    toolbarComments.addEventListener('click', toggleComments);
+    commentsClose.addEventListener('click', toggleComments);
     document.getElementById('toolbar-clear-cache').addEventListener('click', clearCache);
 
     // Welcome screen
