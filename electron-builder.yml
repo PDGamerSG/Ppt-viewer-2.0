@@ -1,0 +1,18 @@
+appId: com.pptviewer.app
+productName: PPT Viewer
+win:
+  target: nsis
+  icon: assets/icon.ico
+fileAssociations:
+  - ext: pptx
+    name: PowerPoint Presentation
+    role: Viewer
+  - ext: ppt
+    name: PowerPoint 97-2003 Presentation
+    role: Viewer
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+files:
+  - "**/*"
+  - "!**/*.md"
