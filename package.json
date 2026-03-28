@@ -1,0 +1,33 @@
+{
+  "name": "ppt-viewer",
+  "version": "1.0.0",
+  "description": "Fast, native PowerPoint viewer for Windows",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win",
+    "test": "echo \"No tests\" && exit 0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PDGamerSG/Ppt-viewer-2.0.git"
+  },
+  "keywords": [
+    "pptx",
+    "powerpoint",
+    "viewer",
+    "electron"
+  ],
+  "author": "PDGamerSG",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/PDGamerSG/Ppt-viewer-2.0/issues"
+  },
+  "homepage": "https://github.com/PDGamerSG/Ppt-viewer-2.0#readme",
+  "dependencies": {
+    "electron": "^41.1.0",
+    "electron-builder": "^26.8.1",
+    "electron-store": "^8.1.0",
+    "pdfjs-dist": "^3.11.174"
+  }
+}
