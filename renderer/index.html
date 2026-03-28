@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PPT Viewer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="hidden">
+    <div class="loading-content">
+      <div class="spinner"></div>
+      <p>Converting slides, please wait...</p>
+    </div>
+  </div>
+
+  <!-- Error Card -->
+  <div id="error-overlay" class="hidden">
+    <div class="error-card">
+      <h2>Conversion Failed</h2>
+      <p id="error-message"></p>
+      <button id="error-retry-btn" class="btn btn-primary">Try Again</button>
+      <button id="error-close-btn" class="btn btn-secondary">Close</button>
+    </div>
+  </div>
+
+  <!-- LibreOffice Missing Screen -->
+  <div id="libreoffice-screen" class="hidden">
+    <div class="onboarding-card">
+      <div class="onboarding-icon">📄</div>
+      <h1>LibreOffice is required to use PPT Viewer</h1>
+      <p class="onboarding-desc">PPT Viewer uses LibreOffice to convert your slides. It's free and takes 2 minutes to install.</p>
+      <button id="download-lo-btn" class="btn btn-primary btn-large">Download LibreOffice (Free)</button>
+      <button id="refresh-lo-btn" class="btn btn-secondary">I've installed it — Refresh</button>
+      <div class="manual-path">
+        <label>Or enter LibreOffice path manually:</label>
+        <div class="path-input-row">
+          <input type="text" id="lo-path-input" placeholder="C:\Program Files\LibreOffice\program\soffice.exe">
+          <button id="lo-path-save-btn" class="btn btn-accent">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Welcome Screen -->
+  <div id="welcome-screen" class="hidden">
+    <div class="welcome-card">
+      <h1 class="app-title">PPT Viewer</h1>
+      <p class="app-subtitle">Fast, native PowerPoint viewer</p>
+      <div id="drop-zone" class="drop-zone">
+        <div class="drop-icon">📂</div>
+        <p>Drag & drop a .pptx or .ppt file here</p>
+        <p class="drop-hint">or</p>
+        <button id="welcome-open-btn" class="btn btn-primary">Open File</button>
+      </div>
+      <div id="recent-files" class="recent-files">
+        <h3>Recent Files</h3>
+        <ul id="recent-list"></ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Viewer -->
+  <div id="viewer" class="hidden">
+    <!-- Toolbar -->
+    <div id="toolbar">
+      <button id="toolbar-open" class="toolbar-btn" title="Open File (Ctrl+O)">
+        <span>📂</span> Open
+      </button>
+      <div class="toolbar-sep"></div>
+      <button id="toolbar-prev" class="toolbar-btn" title="Previous Slide">◀</button>
+      <span id="toolbar-slide-counter" class="toolbar-text">Slide 1 of 1</span>
+      <button id="toolbar-next" class="toolbar-btn" title="Next Slide">▶</button>
+      <div class="toolbar-sep"></div>
+      <button id="toolbar-zoom-out" class="toolbar-btn" title="Zoom Out">−</button>
+      <span id="toolbar-zoom" class="toolbar-text">100%</span>
+      <button id="toolbar-zoom-in" class="toolbar-btn" title="Zoom In">+</button>
+      <button id="toolbar-zoom-reset" class="toolbar-btn" title="Reset Zoom">Fit</button>
+      <div class="toolbar-sep"></div>
+      <button id="toolbar-present" class="toolbar-btn btn-accent" title="Present (F5)">
+        <span>▶</span> Present
+      </button>
+    </div>
+
+    <!-- Content Area -->
+    <div id="content-area">
+      <!-- Thumbnail Sidebar -->
+      <div id="sidebar">
+        <div id="thumbnail-list"></div>
+      </div>
+
+      <!-- Main Slide View -->
+      <div id="main-view">
+        <div id="slide-container">
+          <canvas id="slide-canvas"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div id="status-bar">
+      <span id="status-filename">No file open</span>
+      <span id="status-slide">Slide 0 of 0</span>
+      <span id="status-right">
+        <span id="status-zoom">100%</span>
+        <span id="status-lo" class="lo-status">
+          <span class="lo-dot"></span>
+          <span id="status-lo-text">Checking...</span>
+        </span>
+      </span>
+    </div>
+  </div>
+
+  <!-- Fullscreen Overlay Counter -->
+  <div id="fs-counter" class="hidden">Slide 1 of 1</div>
+
+  <script src="../node_modules/pdfjs-dist/build/pdf.min.js"></script>
+  <script src="../lib/pdfRenderer.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
