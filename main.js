@@ -2,7 +2,6 @@ const { app, BrowserWindow, ipcMain, dialog, Menu, shell } = require('electron')
 const path = require('path');
 const fs = require('fs');
 const { detectLibreOffice, convertToPdf, cleanupCache } = require('./lib/converter');
-const { extractComments } = require('./lib/comments');
 const {
   getRecentFiles,
   addRecentFile,
@@ -211,10 +210,6 @@ ipcMain.handle('exit-fullscreen', () => {
 
 ipcMain.handle('is-fullscreen', () => {
   return mainWindow ? mainWindow.isFullScreen() : false;
-});
-
-ipcMain.handle('extract-comments', (_event, filePath) => {
-  return extractComments(filePath);
 });
 
 ipcMain.handle('clear-cache', () => {

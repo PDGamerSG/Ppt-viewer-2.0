@@ -4,12 +4,13 @@
   var PdfRenderer = window.PdfRenderer;
 
   // ---- Multi-tab state ----
-  // Each tab: { id, filePath, fileName, pdfData, currentSlide, totalSlides, zoomLevel,
-  //             thumbnailDataUrls: [], comments: null|{slideNum:[...]}, commentsVisible }
   var tabs = [];
   var activeTabId = null;
   var tabIdCounter = 0;
   var sidebarVisible = true;
+
+  // Drag reorder state
+  var dragTabId = null;
 
   // Global
   var isFullscreen = false;
@@ -46,12 +47,6 @@
   var toolbarZoomReset = document.getElementById('toolbar-zoom-reset');
   var toolbarZoom = document.getElementById('toolbar-zoom');
   var toolbarPresent = document.getElementById('toolbar-present');
-  var toolbarComments = document.getElementById('toolbar-comments');
-
-  // Comments panel
-  var commentsPanel = document.getElementById('comments-panel');
-  var commentsList = document.getElementById('comments-list');
-  var commentsClose = document.getElementById('comments-close');
 
   // Welcome screen
   var dropZone = document.getElementById('drop-zone');
@@ -69,6 +64,13 @@
       if (tabs[i].id === activeTabId) return tabs[i];
     }
     return null;
+  }
+
+  function getTabIndex(tabId) {
+    for (var i = 0; i < tabs.length; i++) {
+      if (tabs[i].id === tabId) return i;
+    }
+    return -1;
   }
 
   function escapeHtml(text) {
@@ -136,30 +138,107 @@
     }
   }
 
-  // ---- Tab bar rendering ----
+  // ---- Tab bar rendering (with drag-to-reorder) ----
   function renderTabs() {
     tabList.innerHTML = '';
     for (var i = 0; i < tabs.length; i++) {
-      (function (tab) {
+      (function (tab, idx) {
         var el = document.createElement('div');
         el.className = 'tab-item' + (tab.id === activeTabId ? ' active' : '');
+        el.draggable = true;
+        el.dataset.tabId = tab.id;
         el.innerHTML =
           '<span class="tab-item-name">' + escapeHtml(tab.fileName) + '</span>' +
           '<span class="tab-close" title="Close tab">&times;</span>';
 
+        // Click to switch
         el.addEventListener('click', function (e) {
           if (e.target.classList.contains('tab-close')) return;
           switchTab(tab.id);
         });
 
+        // Close
         el.querySelector('.tab-close').addEventListener('click', function (e) {
           e.stopPropagation();
           closeTab(tab.id);
         });
 
+        // Drag start
+        el.addEventListener('dragstart', function (e) {
+          dragTabId = tab.id;
+          el.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', ''); // required for Firefox
+        });
+
+        el.addEventListener('dragend', function () {
+          el.classList.remove('dragging');
+          dragTabId = null;
+          clearDragIndicators();
+        });
+
+        // Drag over — show drop indicator
+        el.addEventListener('dragover', function (e) {
+          if (dragTabId === null || dragTabId === tab.id) return;
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+
+          clearDragIndicators();
+          var rect = el.getBoundingClientRect();
+          var midX = rect.left + rect.width / 2;
+          if (e.clientX < midX) {
+            el.classList.add('drag-over-left');
+          } else {
+            el.classList.add('drag-over-right');
+          }
+        });
+
+        el.addEventListener('dragleave', function () {
+          el.classList.remove('drag-over-left');
+          el.classList.remove('drag-over-right');
+        });
+
+        // Drop — reorder
+        el.addEventListener('drop', function (e) {
+          e.preventDefault();
+          if (dragTabId === null || dragTabId === tab.id) return;
+
+          var fromIdx = getTabIndex(dragTabId);
+          var toIdx = getTabIndex(tab.id);
+          if (fromIdx === -1 || toIdx === -1) return;
+
+          // Determine if dropping before or after this tab
+          var rect = el.getBoundingClientRect();
+          var midX = rect.left + rect.width / 2;
+          var insertBefore = e.clientX < midX;
+
+          // Remove dragged tab from array
+          var movedTab = tabs.splice(fromIdx, 1)[0];
+
+          // Recalculate toIdx after removal
+          var newToIdx = getTabIndex(tab.id);
+          if (insertBefore) {
+            tabs.splice(newToIdx, 0, movedTab);
+          } else {
+            tabs.splice(newToIdx + 1, 0, movedTab);
+          }
+
+          clearDragIndicators();
+          dragTabId = null;
+          renderTabs();
+        });
+
         tabList.appendChild(el);
-      })(tabs[i]);
+      })(tabs[i], i);
     }
+  }
+
+  function clearDragIndicators() {
+    var items = tabList.querySelectorAll('.tab-item');
+    items.forEach(function (item) {
+      item.classList.remove('drag-over-left');
+      item.classList.remove('drag-over-right');
+    });
   }
 
   // ---- Tab management ----
@@ -175,11 +254,9 @@
   }
 
   async function restoreTab(tab) {
-    // Reload the PDF document for this tab
     PdfRenderer.cleanup();
     await PdfRenderer.loadDocument(tab.pdfData);
 
-    // Restore thumbnails from cached data URLs (instant) or render fresh
     if (tab.thumbnailDataUrls && tab.thumbnailDataUrls.length === tab.totalSlides) {
       restoreThumbnailsFromCache(tab);
     } else {
@@ -188,7 +265,6 @@
 
     updateSlideCounter();
     updateZoomDisplay();
-    updateCommentsUI(tab);
     window.api.setTitle(tab.fileName + ' \u2014 PPT Viewer');
     await renderCurrentSlide();
   }
@@ -222,10 +298,7 @@
   }
 
   function closeTab(tabId) {
-    var idx = -1;
-    for (var i = 0; i < tabs.length; i++) {
-      if (tabs[i].id === tabId) { idx = i; break; }
-    }
+    var idx = getTabIndex(tabId);
     if (idx === -1) return;
 
     tabs.splice(idx, 1);
@@ -233,8 +306,6 @@
     if (tabs.length === 0) {
       activeTabId = null;
       PdfRenderer.cleanup();
-      commentsPanel.classList.add('hidden');
-      toolbarComments.classList.add('hidden');
       showWelcome();
       loadRecentFiles();
       return;
@@ -254,7 +325,6 @@
   async function openFile(filePath) {
     if (!libreOfficeReady) return;
 
-    // Check if already open in a tab
     for (var i = 0; i < tabs.length; i++) {
       if (tabs[i].filePath === filePath) {
         switchTab(tabs[i].id);
@@ -266,12 +336,7 @@
     loadingOverlay.classList.remove('hidden');
 
     try {
-      // Start conversion and comment extraction in parallel
-      var pdfPromise = window.api.convertFile(filePath);
-      var commentsPromise = window.api.extractComments(filePath);
-
-      var pdfPath = await pdfPromise;
-      var comments = await commentsPromise;
+      var pdfPath = await window.api.convertFile(filePath);
       var data = await window.api.readFile(pdfPath);
 
       PdfRenderer.cleanup();
@@ -286,8 +351,6 @@
         totalSlides: numPages,
         zoomLevel: 1,
         thumbnailDataUrls: [],
-        comments: comments,
-        commentsVisible: false,
       };
 
       tabs.push(tab);
@@ -299,11 +362,9 @@
       renderTabs();
       updateSlideCounter();
       updateZoomDisplay();
-      updateCommentsUI(tab);
       window.api.setTitle(fileName + ' \u2014 PPT Viewer');
 
       await renderCurrentSlide();
-      // Render thumbnails in background and cache data URLs
       renderAllThumbnails(tab);
     } catch (err) {
       showError(err.message || String(err));
@@ -336,7 +397,6 @@
     await PdfRenderer.renderSlide(slideCanvas, tab.currentSlide, effectiveZoom);
     updateSlideCounter();
     updateThumbnailHighlight();
-    renderCommentsForSlide(tab);
   }
 
   async function renderAllThumbnails(tab) {
@@ -350,7 +410,6 @@
 
       var canvas = await PdfRenderer.renderThumbnail(i, 160);
       if (canvas) {
-        // Cache as data URL for instant restore on tab switch
         tab.thumbnailDataUrls.push(canvas.toDataURL('image/png'));
         item.appendChild(canvas);
       } else {
@@ -387,79 +446,6 @@
     var active = thumbnailList.querySelector('.thumbnail-item.active');
     if (active) {
       active.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    }
-  }
-
-  // ---- Comments ----
-  function updateCommentsUI(tab) {
-    if (tab.comments) {
-      toolbarComments.classList.remove('hidden');
-      if (tab.commentsVisible) {
-        commentsPanel.classList.remove('hidden');
-      } else {
-        commentsPanel.classList.add('hidden');
-      }
-      renderCommentsForSlide(tab);
-    } else {
-      toolbarComments.classList.add('hidden');
-      commentsPanel.classList.add('hidden');
-    }
-  }
-
-  function toggleComments() {
-    var tab = getActiveTab();
-    if (!tab || !tab.comments) return;
-
-    tab.commentsVisible = !tab.commentsVisible;
-    if (tab.commentsVisible) {
-      commentsPanel.classList.remove('hidden');
-      renderCommentsForSlide(tab);
-    } else {
-      commentsPanel.classList.add('hidden');
-    }
-    // Re-render slide to adjust for panel width
-    setTimeout(function () { renderCurrentSlide(); }, 50);
-  }
-
-  function renderCommentsForSlide(tab) {
-    if (!tab || !tab.comments || !tab.commentsVisible) return;
-
-    var slideComments = tab.comments[tab.currentSlide];
-    commentsList.innerHTML = '';
-
-    if (!slideComments || slideComments.length === 0) {
-      commentsList.innerHTML = '<div class="comments-empty">No comments on this slide</div>';
-      return;
-    }
-
-    for (var i = 0; i < slideComments.length; i++) {
-      var c = slideComments[i];
-      var div = document.createElement('div');
-      div.className = 'comment-item';
-
-      var authorDiv = document.createElement('div');
-      authorDiv.className = 'comment-author';
-      authorDiv.textContent = c.author;
-      div.appendChild(authorDiv);
-
-      var textDiv = document.createElement('div');
-      textDiv.className = 'comment-text';
-      textDiv.textContent = c.text;
-      div.appendChild(textDiv);
-
-      if (c.date) {
-        var dateDiv = document.createElement('div');
-        dateDiv.className = 'comment-date';
-        try {
-          var d = new Date(c.date);
-          dateDiv.textContent = d.toLocaleDateString() + ' ' + d.toLocaleTimeString();
-        } catch (_) {
-          dateDiv.textContent = c.date;
-        }
-        div.appendChild(dateDiv);
-      }
-
-      commentsList.appendChild(div);
     }
   }
 
@@ -525,20 +511,14 @@
   // ---- Tab cycling ----
   function nextTab() {
     if (tabs.length <= 1) return;
-    var idx = -1;
-    for (var i = 0; i < tabs.length; i++) {
-      if (tabs[i].id === activeTabId) { idx = i; break; }
-    }
+    var idx = getTabIndex(activeTabId);
     var next = (idx + 1) % tabs.length;
     switchTab(tabs[next].id);
   }
 
   function prevTab() {
     if (tabs.length <= 1) return;
-    var idx = -1;
-    for (var i = 0; i < tabs.length; i++) {
-      if (tabs[i].id === activeTabId) { idx = i; break; }
-    }
+    var idx = getTabIndex(activeTabId);
     var prev = (idx - 1 + tabs.length) % tabs.length;
     switchTab(tabs[prev].id);
   }
@@ -602,7 +582,6 @@
 
   // ---- Event Listeners ----
   function setupEventListeners() {
-    // Toolbar
     toolbarOpen.addEventListener('click', function () { window.api.openFileDialog(); });
     tabOpenBtn.addEventListener('click', function () { window.api.openFileDialog(); });
     toolbarToggleSidebar.addEventListener('click', toggleSidebar);
@@ -612,14 +591,10 @@
     toolbarZoomOut.addEventListener('click', zoomOut);
     toolbarZoomReset.addEventListener('click', zoomReset);
     toolbarPresent.addEventListener('click', toggleFullscreen);
-    toolbarComments.addEventListener('click', toggleComments);
-    commentsClose.addEventListener('click', toggleComments);
     document.getElementById('toolbar-clear-cache').addEventListener('click', clearCache);
 
-    // Welcome screen
     welcomeOpenBtn.addEventListener('click', function () { window.api.openFileDialog(); });
 
-    // Error
     errorRetryBtn.addEventListener('click', function () {
       errorOverlay.classList.add('hidden');
       var tab = getActiveTab();
@@ -629,7 +604,6 @@
       errorOverlay.classList.add('hidden');
     });
 
-    // LibreOffice screen
     downloadLoBtn.addEventListener('click', function () {
       window.api.openExternal('https://www.libreoffice.org/download/download-libreoffice/');
     });
@@ -658,7 +632,6 @@
 
     // Keyboard shortcuts
     document.addEventListener('keydown', function (e) {
-      // Ctrl shortcuts — work even without a file open
       if (e.ctrlKey && e.key === 'Tab') {
         e.preventDefault();
         if (e.shiftKey) prevTab();
@@ -676,7 +649,6 @@
         return;
       }
 
-      // Slide navigation — only when a file is open
       var tab = getActiveTab();
       if (!tab || tab.totalSlides === 0) return;
 
@@ -714,13 +686,11 @@
       }
     });
 
-    // Click on main slide to advance
     slideCanvas.addEventListener('click', function () {
       var tab = getActiveTab();
       if (tab && tab.totalSlides > 0) nextSlide();
     });
 
-    // Ctrl+Scroll zoom
     document.getElementById('main-view').addEventListener('wheel', function (e) {
       var tab = getActiveTab();
       if (e.ctrlKey && tab && tab.totalSlides > 0) {
@@ -730,7 +700,6 @@
       }
     }, { passive: false });
 
-    // Window resize
     window.addEventListener('resize', function () {
       clearTimeout(resizeTimeout);
       resizeTimeout = setTimeout(function () {
@@ -739,7 +708,6 @@
       }, 150);
     });
 
-    // Drag & drop
     document.body.addEventListener('dragover', function (e) {
       e.preventDefault();
       e.stopPropagation();
@@ -766,7 +734,6 @@
       handleDrop(e);
     });
 
-    // IPC events from main process
     window.api.onOpenFile(function (filePath) { openFile(filePath); });
     window.api.onToggleFullscreen(function () { toggleFullscreen(); });
     window.api.onZoomIn(function () { zoomIn(); });
