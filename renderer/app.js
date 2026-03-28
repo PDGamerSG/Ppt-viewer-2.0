@@ -323,7 +323,9 @@
 
   // ---- File opening ----
   async function openFile(filePath) {
-    if (!libreOfficeReady) return;
+    var ext = filePath.split('.').pop().toLowerCase();
+    var isPdf = (ext === 'pdf');
+    if (!isPdf && !libreOfficeReady) return;
 
     for (var i = 0; i < tabs.length; i++) {
       if (tabs[i].filePath === filePath) {
@@ -746,7 +748,7 @@
     for (var i = 0; i < files.length; i++) {
       var file = files[i];
       var ext = file.name.split('.').pop().toLowerCase();
-      if (ext === 'pptx' || ext === 'ppt') {
+      if (ext === 'pptx' || ext === 'ppt' || ext === 'pdf') {
         openFile(file.path);
       }
     }

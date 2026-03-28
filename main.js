@@ -40,7 +40,7 @@ function createWindow() {
     // Handle CLI argument
     const fileArg = process.argv.find((arg) => {
       const ext = path.extname(arg).toLowerCase();
-      return ext === '.pptx' || ext === '.ppt';
+      return ext === '.pptx' || ext === '.ppt' || ext === '.pdf';
     });
     if (fileArg && fs.existsSync(fileArg)) {
       mainWindow.webContents.send('open-file', fileArg);
@@ -139,7 +139,9 @@ async function openFileDialog() {
   const result = await dialog.showOpenDialog(mainWindow, {
     title: 'Open Presentation',
     filters: [
+      { name: 'Presentations & PDFs', extensions: ['pptx', 'ppt', 'pdf'] },
       { name: 'PowerPoint Files', extensions: ['pptx', 'ppt'] },
+      { name: 'PDF Files', extensions: ['pdf'] },
       { name: 'All Files', extensions: ['*'] },
     ],
     properties: ['openFile', 'multiSelections'],
@@ -163,6 +165,12 @@ ipcMain.handle('detect-libreoffice', () => {
 });
 
 ipcMain.handle('convert-file', async (_event, filePath) => {
+  // PDF files need no conversion
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.pdf') {
+    return filePath;
+  }
+
   const customPath = getLibreOfficePath();
   const sofficePath = detectLibreOffice(customPath);
   if (!sofficePath) {

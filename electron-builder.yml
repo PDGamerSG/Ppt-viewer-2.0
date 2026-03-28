@@ -10,6 +10,9 @@ fileAssociations:
   - ext: ppt
     name: PowerPoint 97-2003 Presentation
     role: Viewer
+  - ext: pdf
+    name: PDF Document
+    role: Viewer
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
