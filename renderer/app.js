@@ -164,12 +164,6 @@
   function switchTab(tabId) {
     if (activeTabId === tabId) return;
 
-    // Save current tab state (thumbnails HTML)
-    var current = getActiveTab();
-    if (current) {
-      current.thumbnailsHtml = thumbnailList.innerHTML;
-    }
-
     activeTabId = tabId;
     var tab = getActiveTab();
     if (!tab) return;
@@ -183,23 +177,13 @@
     PdfRenderer.cleanup();
     await PdfRenderer.loadDocument(tab.pdfData);
 
-    // Restore thumbnails
-    if (tab.thumbnailsHtml) {
-      thumbnailList.innerHTML = tab.thumbnailsHtml;
-      // Re-bind click events on thumbnails
-      var items = thumbnailList.querySelectorAll('.thumbnail-item');
-      items.forEach(function (item) {
-        var page = parseInt(item.dataset.page);
-        item.addEventListener('click', function () { goToSlide(page); });
-      });
-    } else {
-      renderAllThumbnails(tab);
-    }
+    // Always re-render thumbnails fresh (canvas pixels don't survive innerHTML)
+    await renderAllThumbnails(tab);
 
     updateSlideCounter();
     updateZoomDisplay();
     window.api.setTitle(tab.fileName + ' \u2014 PPT Viewer');
-    renderCurrentSlide();
+    await renderCurrentSlide();
   }
 
   function closeTab(tabId) {
@@ -260,14 +244,7 @@
         currentSlide: 1,
         totalSlides: numPages,
         zoomLevel: 1,
-        thumbnailsHtml: null,
       };
-
-      // Save current tab thumbnails before switching
-      var current = getActiveTab();
-      if (current) {
-        current.thumbnailsHtml = thumbnailList.innerHTML;
-      }
 
       tabs.push(tab);
       activeTabId = tab.id;
@@ -337,8 +314,6 @@
 
       thumbnailList.appendChild(item);
     }
-
-    tab.thumbnailsHtml = thumbnailList.innerHTML;
   }
 
   function updateThumbnailHighlight() {
@@ -609,8 +584,8 @@
 
   function handleDrop(e) {
     var files = e.dataTransfer.files;
-    if (files.length > 0) {
-      var file = files[0];
+    for (var i = 0; i < files.length; i++) {
+      var file = files[i];
       var ext = file.name.split('.').pop().toLowerCase();
       if (ext === 'pptx' || ext === 'ppt') {
         openFile(file.path);
