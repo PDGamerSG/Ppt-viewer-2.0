@@ -395,6 +395,43 @@
     fsCounter.textContent = text;
   }
 
+  // ---- Tab cycling ----
+  function nextTab() {
+    if (tabs.length <= 1) return;
+    var idx = -1;
+    for (var i = 0; i < tabs.length; i++) {
+      if (tabs[i].id === activeTabId) { idx = i; break; }
+    }
+    var next = (idx + 1) % tabs.length;
+    switchTab(tabs[next].id);
+  }
+
+  function prevTab() {
+    if (tabs.length <= 1) return;
+    var idx = -1;
+    for (var i = 0; i < tabs.length; i++) {
+      if (tabs[i].id === activeTabId) { idx = i; break; }
+    }
+    var prev = (idx - 1 + tabs.length) % tabs.length;
+    switchTab(tabs[prev].id);
+  }
+
+  function closeActiveTab() {
+    if (activeTabId !== null) {
+      closeTab(activeTabId);
+    }
+  }
+
+  // ---- Clear cache ----
+  async function clearCache() {
+    await window.api.clearCache();
+    // Brief visual feedback
+    var btn = document.getElementById('toolbar-clear-cache');
+    var original = btn.innerHTML;
+    btn.innerHTML = '<span>✓</span> Cleared';
+    setTimeout(function () { btn.innerHTML = original; }, 1500);
+  }
+
   // ---- Sidebar toggle ----
   function toggleSidebar() {
     sidebarVisible = !sidebarVisible;
@@ -450,6 +487,7 @@
     toolbarZoomOut.addEventListener('click', zoomOut);
     toolbarZoomReset.addEventListener('click', zoomReset);
     toolbarPresent.addEventListener('click', toggleFullscreen);
+    document.getElementById('toolbar-clear-cache').addEventListener('click', clearCache);
 
     // Welcome screen
     welcomeOpenBtn.addEventListener('click', function () { window.api.openFileDialog(); });
@@ -491,8 +529,27 @@
       }
     });
 
-    // Keyboard navigation — now includes ArrowUp and ArrowDown
+    // Keyboard shortcuts
     document.addEventListener('keydown', function (e) {
+      // Ctrl shortcuts — work even without a file open
+      if (e.ctrlKey && e.key === 'Tab') {
+        e.preventDefault();
+        if (e.shiftKey) prevTab();
+        else nextTab();
+        return;
+      }
+      if (e.ctrlKey && (e.key === 'w' || e.key === 'W')) {
+        e.preventDefault();
+        closeActiveTab();
+        return;
+      }
+      if (e.ctrlKey && (e.key === 'b' || e.key === 'B')) {
+        e.preventDefault();
+        toggleSidebar();
+        return;
+      }
+
+      // Slide navigation — only when a file is open
       var tab = getActiveTab();
       if (!tab || tab.totalSlides === 0) return;
 
@@ -508,6 +565,14 @@
         case 'PageDown':
           e.preventDefault();
           nextSlide();
+          break;
+        case 'Home':
+          e.preventDefault();
+          goToSlide(1);
+          break;
+        case 'End':
+          e.preventDefault();
+          goToSlide(tab.totalSlides);
           break;
         case 'Escape':
           if (isFullscreen) {
