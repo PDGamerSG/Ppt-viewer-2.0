@@ -212,6 +212,11 @@ ipcMain.handle('is-fullscreen', () => {
   return mainWindow ? mainWindow.isFullScreen() : false;
 });
 
+ipcMain.handle('clear-cache', () => {
+  cleanupCache();
+  return true;
+});
+
 // App lifecycle
 app.whenReady().then(createWindow);
 

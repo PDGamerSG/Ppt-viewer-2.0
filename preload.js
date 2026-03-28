@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('api', {
   enterFullscreen: () => ipcRenderer.invoke('enter-fullscreen'),
   exitFullscreen: () => ipcRenderer.invoke('exit-fullscreen'),
   isFullscreen: () => ipcRenderer.invoke('is-fullscreen'),
+  clearCache: () => ipcRenderer.invoke('clear-cache'),
 
   // Events from main process
   onOpenFile: (callback) => ipcRenderer.on('open-file', (_e, filePath) => callback(filePath)),
