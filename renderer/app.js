@@ -8,15 +8,27 @@
   var activeTabId = null;
   var tabIdCounter = 0;
   var sidebarVisible = true;
+  var barsCollapsed = false;
 
   // Drag reorder state
   var dragTabId = null;
+
+  // Pan/drag state for zoomed slides
+  var isPanning = false;
+  var panStartX = 0;
+  var panStartY = 0;
+  var scrollStartX = 0;
+  var scrollStartY = 0;
+  var didPan = false;
 
   // Global
   var isFullscreen = false;
   var fsCounterTimeout = null;
   var resizeTimeout = null;
   var libreOfficeReady = false;
+
+  // File open queue — serialize opens to prevent PdfRenderer race conditions
+  var openFileQueue = Promise.resolve();
 
   // DOM Elements
   var loadingOverlay = document.getElementById('loading-overlay');
@@ -147,7 +159,9 @@
         el.className = 'tab-item' + (tab.id === activeTabId ? ' active' : '');
         el.draggable = true;
         el.dataset.tabId = tab.id;
+        var loadingDot = tab.loading ? '<span class="tab-loading-dot"></span> ' : '';
         el.innerHTML =
+          loadingDot +
           '<span class="tab-item-name">' + escapeHtml(tab.fileName) + '</span>' +
           '<span class="tab-close" title="Close tab">&times;</span>';
 
@@ -250,6 +264,17 @@
     if (!tab) return;
 
     renderTabs();
+
+    // Don't try to restore a tab that's still loading
+    if (tab.loading) {
+      thumbnailList.innerHTML = '';
+      slideCanvas.width = 0;
+      slideCanvas.height = 0;
+      toolbarSlideCounter.textContent = 'Loading...';
+      window.api.setTitle(tab.fileName + ' (loading) \u2014 PPT Viewer');
+      return;
+    }
+
     restoreTab(tab);
   }
 
@@ -315,14 +340,22 @@
       var newIdx = Math.min(idx, tabs.length - 1);
       activeTabId = tabs[newIdx].id;
       renderTabs();
-      restoreTab(tabs[newIdx]);
+      if (!tabs[newIdx].loading) {
+        restoreTab(tabs[newIdx]);
+      }
     } else {
       renderTabs();
     }
   }
 
   // ---- File opening ----
-  async function openFile(filePath) {
+  function openFile(filePath) {
+    var task = openFileQueue.then(function () { return doOpenFile(filePath); });
+    openFileQueue = task.catch(function () {});
+    return task;
+  }
+
+  async function doOpenFile(filePath) {
     var ext = filePath.split('.').pop().toLowerCase();
     var isPdf = (ext === 'pdf');
     if (!isPdf && !libreOfficeReady) return;
@@ -335,43 +368,77 @@
     }
 
     var fileName = extractFileName(filePath);
-    loadingOverlay.classList.remove('hidden');
+
+    // Create the tab immediately with a loading state so UI stays responsive
+    var tab = {
+      id: ++tabIdCounter,
+      filePath: filePath,
+      fileName: fileName,
+      pdfData: null,
+      currentSlide: 1,
+      totalSlides: 0,
+      zoomLevel: 1,
+      thumbnailDataUrls: [],
+      loading: true,
+    };
+
+    tabs.push(tab);
+    showViewer();
+    renderTabs();
+
+    // Only show full-page loading overlay if this is the only/active tab
+    var isFirstTab = (tabs.length === 1);
+    if (isFirstTab) {
+      activeTabId = tab.id;
+      loadingOverlay.classList.remove('hidden');
+    }
 
     try {
       var pdfPath = await window.api.convertFile(filePath);
       var data = await window.api.readFile(pdfPath);
 
+      // Tab may have been closed while loading
+      if (getTabIndex(tab.id) === -1) return;
+
+      tab.pdfData = data;
+      tab.loading = false;
+
+      // Load the document to get page count
       PdfRenderer.cleanup();
       var numPages = await PdfRenderer.loadDocument(data);
-
-      var tab = {
-        id: ++tabIdCounter,
-        filePath: filePath,
-        fileName: fileName,
-        pdfData: data,
-        currentSlide: 1,
-        totalSlides: numPages,
-        zoomLevel: 1,
-        thumbnailDataUrls: [],
-      };
-
-      tabs.push(tab);
-      activeTabId = tab.id;
+      tab.totalSlides = numPages;
 
       await window.api.saveRecentFile(filePath, fileName);
 
-      showViewer();
-      renderTabs();
-      updateSlideCounter();
-      updateZoomDisplay();
-      window.api.setTitle(fileName + ' \u2014 PPT Viewer');
-
-      await renderCurrentSlide();
-      renderAllThumbnails(tab);
+      // If this tab is active (or was the first), render it
+      if (activeTabId === tab.id || isFirstTab) {
+        activeTabId = tab.id;
+        renderTabs();
+        updateSlideCounter();
+        updateZoomDisplay();
+        window.api.setTitle(fileName + ' \u2014 PPT Viewer');
+        await renderCurrentSlide();
+        renderAllThumbnails(tab);
+      } else {
+        // Background tab finished loading — just update the tab indicator
+        renderTabs();
+      }
     } catch (err) {
+      // Remove failed tab
+      var failIdx = getTabIndex(tab.id);
+      if (failIdx !== -1) tabs.splice(failIdx, 1);
+      renderTabs();
+
+      if (tabs.length === 0) {
+        showWelcome();
+        loadRecentFiles();
+      }
+
       showError(err.message || String(err));
     } finally {
-      loadingOverlay.classList.add('hidden');
+      if (isFirstTab) {
+        loadingOverlay.classList.add('hidden');
+      }
     }
   }
 
@@ -381,22 +448,53 @@
   }
 
   // ---- Slide rendering ----
+  var renderTimer = null;
+  var slideSpinner = null;
+
   async function renderCurrentSlide() {
     var tab = getActiveTab();
     if (!tab || tab.totalSlides === 0) return;
 
+    if (!slideSpinner) slideSpinner = document.getElementById('slide-spinner');
+
+    // Show spinner after a short delay so quick renders don't flicker
+    clearTimeout(renderTimer);
+    renderTimer = setTimeout(function () {
+      slideSpinner.classList.remove('hidden');
+    }, 80);
+
     var mainView = document.getElementById('main-view');
+    var slideContainer = document.getElementById('slide-container');
     var maxWidth = mainView.clientWidth - 40;
     var maxHeight = mainView.clientHeight - 40;
 
     var tempCanvas = document.createElement('canvas');
     var tempResult = await PdfRenderer.renderSlide(tempCanvas, tab.currentSlide, 1);
-    if (!tempResult) return;
+    if (!tempResult) {
+      clearTimeout(renderTimer);
+      slideSpinner.classList.add('hidden');
+      return;
+    }
 
     var fitScale = Math.min(maxWidth / tempResult.width, maxHeight / tempResult.height);
     var effectiveZoom = fitScale * tab.zoomLevel;
 
     await PdfRenderer.renderSlide(slideCanvas, tab.currentSlide, effectiveZoom);
+
+    clearTimeout(renderTimer);
+    slideSpinner.classList.add('hidden');
+
+    // When zoomed in beyond fit, add padding and enable pan cursor
+    var canvasW = slideCanvas.offsetWidth;
+    var canvasH = slideCanvas.offsetHeight;
+    var isZoomedBeyondFit = canvasW > mainView.clientWidth || canvasH > mainView.clientHeight;
+    slideContainer.style.padding = isZoomedBeyondFit ? '20px' : '0';
+    if (isZoomedBeyondFit) {
+      mainView.classList.add('pannable');
+    } else {
+      mainView.classList.remove('pannable');
+    }
+
     updateSlideCounter();
     updateThumbnailHighlight();
   }
@@ -552,6 +650,17 @@
     setTimeout(function () { renderCurrentSlide(); }, 50);
   }
 
+  // ---- Collapse tab bar + toolbar ----
+  function toggleBars() {
+    barsCollapsed = !barsCollapsed;
+    if (barsCollapsed) {
+      viewer.classList.add('bars-collapsed');
+    } else {
+      viewer.classList.remove('bars-collapsed');
+    }
+    setTimeout(function () { renderCurrentSlide(); }, 50);
+  }
+
   // ---- Fullscreen ----
   async function toggleFullscreen() {
     var tab = getActiveTab();
@@ -587,6 +696,8 @@
     toolbarOpen.addEventListener('click', function () { window.api.openFileDialog(); });
     tabOpenBtn.addEventListener('click', function () { window.api.openFileDialog(); });
     toolbarToggleSidebar.addEventListener('click', toggleSidebar);
+    document.getElementById('collapse-bars-btn').addEventListener('click', toggleBars);
+    document.getElementById('collapse-restore-btn').addEventListener('click', toggleBars);
     toolbarPrev.addEventListener('click', prevSlide);
     toolbarNext.addEventListener('click', nextSlide);
     toolbarZoomIn.addEventListener('click', zoomIn);
@@ -650,6 +761,11 @@
         toggleSidebar();
         return;
       }
+      if (e.ctrlKey && (e.key === 'h' || e.key === 'H')) {
+        e.preventDefault();
+        toggleBars();
+        return;
+      }
 
       var tab = getActiveTab();
       if (!tab || tab.totalSlides === 0) return;
@@ -689,11 +805,44 @@
     });
 
     slideCanvas.addEventListener('click', function () {
+      // Don't advance slide if we just finished a pan drag
+      if (didPan) return;
       var tab = getActiveTab();
       if (tab && tab.totalSlides > 0) nextSlide();
     });
 
-    document.getElementById('main-view').addEventListener('wheel', function (e) {
+    // Pan with mouse drag when zoomed in
+    var mainViewEl = document.getElementById('main-view');
+
+    mainViewEl.addEventListener('mousedown', function (e) {
+      if (!mainViewEl.classList.contains('pannable')) return;
+      if (e.button !== 0) return; // left click only
+      isPanning = true;
+      didPan = false;
+      panStartX = e.clientX;
+      panStartY = e.clientY;
+      scrollStartX = mainViewEl.scrollLeft;
+      scrollStartY = mainViewEl.scrollTop;
+      mainViewEl.classList.add('panning');
+      e.preventDefault();
+    });
+
+    window.addEventListener('mousemove', function (e) {
+      if (!isPanning) return;
+      var dx = e.clientX - panStartX;
+      var dy = e.clientY - panStartY;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didPan = true;
+      mainViewEl.scrollLeft = scrollStartX - dx;
+      mainViewEl.scrollTop = scrollStartY - dy;
+    });
+
+    window.addEventListener('mouseup', function () {
+      if (!isPanning) return;
+      isPanning = false;
+      mainViewEl.classList.remove('panning');
+    });
+
+    mainViewEl.addEventListener('wheel', function (e) {
       var tab = getActiveTab();
       if (e.ctrlKey && tab && tab.totalSlides > 0) {
         e.preventDefault();
