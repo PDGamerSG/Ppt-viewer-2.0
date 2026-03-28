@@ -91,6 +91,9 @@
       <button id="toolbar-present" class="toolbar-btn btn-accent" title="Present (F5)">
         <span>▶</span> Present
       </button>
+      <button id="toolbar-comments" class="toolbar-btn hidden" title="Toggle Comments Panel">
+        <span>💬</span> Comments
+      </button>
       <div class="toolbar-sep"></div>
       <button id="toolbar-clear-cache" class="toolbar-btn" title="Clear converted PDF cache">
         <span>🗑</span> Clear Cache
@@ -109,6 +112,15 @@
         <div id="slide-container">
           <canvas id="slide-canvas"></canvas>
         </div>
+      </div>
+
+      <!-- Comments Panel (right side, only visible when comments exist) -->
+      <div id="comments-panel" class="hidden">
+        <div id="comments-header">
+          <span>Comments</span>
+          <button id="comments-close" class="comments-close-btn" title="Close comments">&times;</button>
+        </div>
+        <div id="comments-list"></div>
       </div>
     </div>
   </div>

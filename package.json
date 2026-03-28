@@ -25,6 +25,7 @@
   },
   "homepage": "https://github.com/PDGamerSG/Ppt-viewer-2.0#readme",
   "dependencies": {
+    "adm-zip": "^0.5.16",
     "electron": "^41.1.0",
     "electron-builder": "^26.8.1",
     "electron-store": "^8.1.0",
