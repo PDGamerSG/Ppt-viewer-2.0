@@ -95,10 +95,13 @@
       <button id="toolbar-clear-cache" class="toolbar-btn" title="Clear converted PDF cache">
         <span>🗑</span> Clear Cache
       </button>
+      <div class="toolbar-spacer"></div>
+      <button id="collapse-bars-btn" class="toolbar-btn" title="Hide toolbar (Ctrl+H)">▲</button>
     </div>
 
     <!-- Content Area -->
     <div id="content-area">
+      <button id="collapse-restore-btn" title="Show toolbar (Ctrl+H)">▼</button>
       <!-- Thumbnail Sidebar -->
       <div id="sidebar">
         <div id="thumbnail-list"></div>
@@ -106,6 +109,9 @@
 
       <!-- Main Slide View -->
       <div id="main-view">
+        <div id="slide-spinner" class="hidden">
+          <div class="spinner"></div>
+        </div>
         <div id="slide-container">
           <canvas id="slide-canvas"></canvas>
         </div>

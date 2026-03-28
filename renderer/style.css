@@ -398,11 +398,51 @@ body {
   margin: 0 4px;
 }
 
+/* Toolbar spacer pushes collapse btn to the right */
+.toolbar-spacer {
+  flex: 1;
+}
+
+/* Collapsed state — hide tab bar and toolbar, show floating restore arrow */
+#viewer.bars-collapsed #tab-bar,
+#viewer.bars-collapsed #toolbar {
+  display: none;
+}
+
+#collapse-restore-btn {
+  display: none;
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  z-index: 100;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+#collapse-restore-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+#viewer.bars-collapsed #collapse-restore-btn {
+  display: flex;
+}
+
 /* Content Area */
 #content-area {
   display: flex;
   flex: 1;
   overflow: hidden;
+  position: relative;
 }
 
 /* Sidebar */
@@ -467,17 +507,60 @@ body {
 #main-view {
   flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: center;
   background: var(--bg-primary);
-  overflow: hidden;
+  overflow: auto;
   position: relative;
+}
+
+#main-view::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+#main-view::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#main-view::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+#main-view::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+#main-view.pannable {
+  cursor: grab;
+}
+
+#main-view.panning {
+  cursor: grabbing;
+}
+
+#main-view.pannable #slide-canvas {
+  cursor: grab;
+}
+
+#main-view.panning #slide-canvas {
+  cursor: grabbing;
+}
+
+/* Slide loading spinner */
+#slide-spinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
 }
 
 #slide-container {
   display: flex;
   align-items: center;
   justify-content: center;
+  margin: auto;
+  flex-shrink: 0;
 }
 
 #slide-canvas {
@@ -583,6 +666,18 @@ body {
 .tab-add-btn:hover {
   background: var(--bg-secondary);
   color: var(--text-primary);
+}
+
+/* Tab loading indicator */
+.tab-loading-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border: 1.5px solid var(--text-secondary);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink: 0;
 }
 
 /* Tab drag reorder */
