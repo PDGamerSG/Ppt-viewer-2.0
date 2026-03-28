@@ -13,6 +13,43 @@ const {
 
 let mainWindow = null;
 
+// Extract file argument from argv
+function findFileArg(argv) {
+  return argv.find((arg) => {
+    const ext = path.extname(arg).toLowerCase();
+    return ext === '.pptx' || ext === '.ppt' || ext === '.pdf';
+  });
+}
+
+// Send file to renderer when ready
+function openFileInWindow(filePath) {
+  if (!mainWindow) return;
+  if (mainWindow.webContents.isLoading()) {
+    mainWindow.webContents.once('did-finish-load', () => {
+      mainWindow.webContents.send('open-file', filePath);
+    });
+  } else {
+    mainWindow.webContents.send('open-file', filePath);
+  }
+}
+
+// Single instance lock — second launch sends file to existing window
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (_event, argv) => {
+    const fileArg = findFileArg(argv);
+    if (fileArg && fs.existsSync(fileArg)) {
+      openFileInWindow(fileArg);
+    }
+    if (mainWindow) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
+
 function createWindow() {
   const bounds = getWindowBounds();
 
@@ -37,11 +74,8 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    // Handle CLI argument
-    const fileArg = process.argv.find((arg) => {
-      const ext = path.extname(arg).toLowerCase();
-      return ext === '.pptx' || ext === '.ppt' || ext === '.pdf';
-    });
+    // Handle CLI argument from first launch
+    const fileArg = findFileArg(process.argv);
     if (fileArg && fs.existsSync(fileArg)) {
       mainWindow.webContents.send('open-file', fileArg);
     }

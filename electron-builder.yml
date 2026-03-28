@@ -7,15 +7,22 @@ fileAssociations:
   - ext: pptx
     name: PowerPoint Presentation
     role: Viewer
+    icon: assets/icon.ico
   - ext: ppt
     name: PowerPoint 97-2003 Presentation
     role: Viewer
+    icon: assets/icon.ico
   - ext: pdf
     name: PDF Document
     role: Viewer
+    icon: assets/icon.ico
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  perMachine: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  include: build/installer.nsh
 files:
   - "**/*"
   - "!**/*.md"
