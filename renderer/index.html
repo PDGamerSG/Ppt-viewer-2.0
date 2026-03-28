@@ -63,10 +63,20 @@
 
   <!-- Main Viewer -->
   <div id="viewer" class="hidden">
+    <!-- Tab Bar -->
+    <div id="tab-bar">
+      <div id="tab-list"></div>
+      <button id="tab-open-btn" class="tab-add-btn" title="Open new file (Ctrl+O)">+</button>
+    </div>
+
     <!-- Toolbar -->
     <div id="toolbar">
       <button id="toolbar-open" class="toolbar-btn" title="Open File (Ctrl+O)">
         <span>📂</span> Open
+      </button>
+      <div class="toolbar-sep"></div>
+      <button id="toolbar-toggle-sidebar" class="toolbar-btn" title="Toggle Sidebar">
+        <span>☰</span> Sidebar
       </button>
       <div class="toolbar-sep"></div>
       <button id="toolbar-prev" class="toolbar-btn" title="Previous Slide">◀</button>
@@ -96,19 +106,6 @@
           <canvas id="slide-canvas"></canvas>
         </div>
       </div>
-    </div>
-
-    <!-- Status Bar -->
-    <div id="status-bar">
-      <span id="status-filename">No file open</span>
-      <span id="status-slide">Slide 0 of 0</span>
-      <span id="status-right">
-        <span id="status-zoom">100%</span>
-        <span id="status-lo" class="lo-status">
-          <span class="lo-dot"></span>
-          <span id="status-lo-text">Checking...</span>
-        </span>
-      </span>
     </div>
   </div>
 

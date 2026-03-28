@@ -485,64 +485,109 @@ body {
   background: #fff;
 }
 
-/* Status Bar */
-#status-bar {
+/* Tab Bar */
+#tab-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  height: 24px;
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border);
-  padding: 0 12px;
-  font-size: 12px;
+  height: 36px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
-#status-filename {
+#tab-bar::-webkit-scrollbar {
+  height: 0;
+}
+
+#tab-list {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  min-width: 0;
+}
+
+.tab-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  height: 100%;
+  min-width: 0;
+  max-width: 200px;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border);
   color: var(--text-secondary);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+  position: relative;
+}
+
+.tab-item:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.tab-item.active {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border-bottom: 2px solid var(--accent);
+}
+
+.tab-item-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 300px;
+  max-width: 140px;
 }
 
-#status-slide {
-  color: var(--text-secondary);
-}
-
-#status-right {
+.tab-close {
   display: flex;
   align-items: center;
-  gap: 12px;
-}
-
-#status-zoom {
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  font-size: 14px;
+  line-height: 1;
   color: var(--text-secondary);
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
 }
 
-.lo-status {
+.tab-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.tab-add-btn {
   display: flex;
   align-items: center;
-  gap: 4px;
-}
-
-.lo-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--text-secondary);
-}
-
-.lo-dot.ready {
-  background: var(--success);
-}
-
-.lo-dot.missing {
-  background: var(--danger);
-}
-
-#status-lo-text {
+  justify-content: center;
+  width: 32px;
+  height: 100%;
+  background: transparent;
+  border: none;
   color: var(--text-secondary);
+  font-size: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.tab-add-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+/* Sidebar hidden state */
+#sidebar.sidebar-hidden {
+  display: none;
 }
 
 /* Fullscreen Counter */
@@ -564,9 +609,9 @@ body {
 }
 
 /* Fullscreen Mode */
+body.fullscreen #tab-bar,
 body.fullscreen #toolbar,
-body.fullscreen #sidebar,
-body.fullscreen #status-bar {
+body.fullscreen #sidebar {
   display: none;
 }
 
