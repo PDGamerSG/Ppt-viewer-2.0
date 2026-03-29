@@ -1,6 +1,7 @@
 node_modules/
+dist/
 build/*
 !build/installer.nsh
+*.exe
 *.blockmap
 *.yml.bak
-*win-unpacked
