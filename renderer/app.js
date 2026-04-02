@@ -31,6 +31,8 @@
   var openFileQueue = Promise.resolve();
 
   // DOM Elements
+  var textLayer = document.getElementById('text-layer');
+
   var loadingOverlay = document.getElementById('loading-overlay');
   var errorOverlay = document.getElementById('error-overlay');
   var errorMessage = document.getElementById('error-message');
@@ -480,6 +482,7 @@
     var effectiveZoom = fitScale * tab.zoomLevel;
 
     await PdfRenderer.renderSlide(slideCanvas, tab.currentSlide, effectiveZoom);
+    await PdfRenderer.renderTextLayer(textLayer, tab.currentSlide, effectiveZoom);
 
     clearTimeout(renderTimer);
     slideSpinner.classList.add('hidden');
@@ -766,7 +769,6 @@
         toggleBars();
         return;
       }
-
       var tab = getActiveTab();
       if (!tab || tab.totalSlides === 0) return;
 
@@ -804,9 +806,11 @@
       }
     });
 
-    slideCanvas.addEventListener('click', function () {
-      // Don't advance slide if we just finished a pan drag
+    // Advance slide on click — but only on empty areas (not text spans)
+    textLayer.addEventListener('click', function (e) {
       if (didPan) return;
+      // If the click landed on a text span, let the browser handle selection — don't advance
+      if (e.target !== textLayer) return;
       var tab = getActiveTab();
       if (tab && tab.totalSlides > 0) nextSlide();
     });
@@ -817,6 +821,8 @@
     mainViewEl.addEventListener('mousedown', function (e) {
       if (!mainViewEl.classList.contains('pannable')) return;
       if (e.button !== 0) return; // left click only
+      // Don't pan when the user is clicking on text — let the browser handle selection
+      if (e.target !== textLayer && textLayer.contains(e.target)) return;
       isPanning = true;
       didPan = false;
       panStartX = e.clientX;
