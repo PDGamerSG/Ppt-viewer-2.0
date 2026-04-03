@@ -481,7 +481,20 @@
     var fitScale = Math.min(maxWidth / tempResult.width, maxHeight / tempResult.height);
     var effectiveZoom = fitScale * tab.zoomLevel;
 
-    await PdfRenderer.renderSlide(slideCanvas, tab.currentSlide, effectiveZoom);
+    // Render to an offscreen canvas first, then copy to the visible canvas
+    // in one step. This prevents the visual glitch where the old content is
+    // cleared/resized before the new content is ready.
+    var offscreen = document.createElement('canvas');
+    await PdfRenderer.renderSlide(offscreen, tab.currentSlide, effectiveZoom);
+
+    // Now swap: resize visible canvas and blit the finished frame
+    slideCanvas.width = offscreen.width;
+    slideCanvas.height = offscreen.height;
+    slideCanvas.style.width = offscreen.style.width;
+    slideCanvas.style.height = offscreen.style.height;
+    var ctx = slideCanvas.getContext('2d');
+    ctx.drawImage(offscreen, 0, 0);
+
     await PdfRenderer.renderTextLayer(textLayer, tab.currentSlide, effectiveZoom);
 
     clearTimeout(renderTimer);
@@ -769,8 +782,16 @@
         toggleBars();
         return;
       }
+      // Let the browser handle Ctrl+<key> combos we don't explicitly handle
+      // (e.g. Ctrl+C for copy, Ctrl+A for select all)
+      if (e.ctrlKey || e.metaKey) return;
+
       var tab = getActiveTab();
       if (!tab || tab.totalSlides === 0) return;
+
+      // Don't hijack arrow keys when the user has a text selection active
+      var sel = window.getSelection();
+      if (sel && sel.toString().length > 0) return;
 
       switch (e.key) {
         case 'ArrowLeft':
@@ -806,14 +827,8 @@
       }
     });
 
-    // Advance slide on click — but only on empty areas (not text spans)
-    textLayer.addEventListener('click', function (e) {
-      if (didPan) return;
-      // If the click landed on a text span, let the browser handle selection — don't advance
-      if (e.target !== textLayer) return;
-      var tab = getActiveTab();
-      if (tab && tab.totalSlides > 0) nextSlide();
-    });
+    // Click on slide area no longer advances slides — navigation is via
+    // toolbar buttons, keyboard arrows, or thumbnail clicks only.
 
     // Pan with mouse drag when zoomed in
     var mainViewEl = document.getElementById('main-view');
