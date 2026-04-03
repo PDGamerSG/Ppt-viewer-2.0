@@ -30,9 +30,13 @@
   // File open queue — serialize opens to prevent PdfRenderer race conditions
   var openFileQueue = Promise.resolve();
 
-  // DOM Elements
-  var textLayer = document.getElementById('text-layer');
+  // Continuous scroll state
+  var renderedPages = new Set();
+  var pageBaseDims = null;
+  var scrollTimer = null;
+  var renderGeneration = 0;
 
+  // DOM Elements
   var loadingOverlay = document.getElementById('loading-overlay');
   var errorOverlay = document.getElementById('error-overlay');
   var errorMessage = document.getElementById('error-message');
@@ -41,7 +45,6 @@
   var loScreen = document.getElementById('libreoffice-screen');
   var welcomeScreen = document.getElementById('welcome-screen');
   var viewer = document.getElementById('viewer');
-  var slideCanvas = document.getElementById('slide-canvas');
   var thumbnailList = document.getElementById('thumbnail-list');
   var recentList = document.getElementById('recent-list');
   var fsCounter = document.getElementById('fs-counter');
@@ -270,8 +273,7 @@
     // Don't try to restore a tab that's still loading
     if (tab.loading) {
       thumbnailList.innerHTML = '';
-      slideCanvas.width = 0;
-      slideCanvas.height = 0;
+      document.getElementById('slide-container').innerHTML = '';
       toolbarSlideCounter.textContent = 'Loading...';
       window.api.setTitle(tab.fileName + ' (loading) \u2014 PPT Viewer');
       return;
@@ -293,7 +295,15 @@
     updateSlideCounter();
     updateZoomDisplay();
     window.api.setTitle(tab.fileName + ' \u2014 PPT Viewer');
-    await renderCurrentSlide();
+    await setupContinuousView(tab);
+
+    // Scroll to the page the user was on
+    setTimeout(function () {
+      var wrappers = document.querySelectorAll('#slide-container .page-wrapper');
+      if (wrappers[tab.currentSlide - 1]) {
+        wrappers[tab.currentSlide - 1].scrollIntoView({ block: 'start' });
+      }
+    }, 0);
   }
 
   function restoreThumbnailsFromCache(tab) {
@@ -419,7 +429,7 @@
         updateSlideCounter();
         updateZoomDisplay();
         window.api.setTitle(fileName + ' \u2014 PPT Viewer');
-        await renderCurrentSlide();
+        await setupContinuousView(tab);
         renderAllThumbnails(tab);
       } else {
         // Background tab finished loading — just update the tab indicator
@@ -449,70 +459,173 @@
     errorOverlay.classList.remove('hidden');
   }
 
-  // ---- Slide rendering ----
-  var renderTimer = null;
-  var slideSpinner = null;
+  // ---- Continuous scroll rendering ----
 
-  async function renderCurrentSlide() {
-    var tab = getActiveTab();
-    if (!tab || tab.totalSlides === 0) return;
+  async function setupContinuousView(tab) {
+    var slideContainer = document.getElementById('slide-container');
+    slideContainer.innerHTML = '';
+    renderedPages.clear();
+    renderGeneration++;
+    pageBaseDims = null;
 
-    if (!slideSpinner) slideSpinner = document.getElementById('slide-spinner');
+    if (tab.totalSlides === 0) return;
 
-    // Show spinner after a short delay so quick renders don't flicker
-    clearTimeout(renderTimer);
-    renderTimer = setTimeout(function () {
-      slideSpinner.classList.remove('hidden');
-    }, 80);
+    // Get base dimensions from first page (all PPT slides share dimensions)
+    pageBaseDims = await PdfRenderer.getPageDimensions(1);
+    if (!pageBaseDims) return;
 
     var mainView = document.getElementById('main-view');
-    var slideContainer = document.getElementById('slide-container');
     var maxWidth = mainView.clientWidth - 40;
-    var maxHeight = mainView.clientHeight - 40;
+    var fitScale = maxWidth / pageBaseDims.width;
+    var effectiveZoom = fitScale * tab.zoomLevel;
+    var cssWidth = pageBaseDims.width * effectiveZoom;
+    var cssHeight = pageBaseDims.height * effectiveZoom;
 
-    var tempCanvas = document.createElement('canvas');
-    var tempResult = await PdfRenderer.renderSlide(tempCanvas, tab.currentSlide, 1);
-    if (!tempResult) {
-      clearTimeout(renderTimer);
-      slideSpinner.classList.add('hidden');
-      return;
+    for (var i = 1; i <= tab.totalSlides; i++) {
+      var wrapper = document.createElement('div');
+      wrapper.className = 'page-wrapper';
+      wrapper.dataset.page = i;
+      wrapper.style.width = cssWidth + 'px';
+      wrapper.style.height = cssHeight + 'px';
+
+      var canvas = document.createElement('canvas');
+      canvas.className = 'page-canvas';
+      wrapper.appendChild(canvas);
+
+      var textLayerDiv = document.createElement('div');
+      textLayerDiv.className = 'page-text-layer';
+      wrapper.appendChild(textLayerDiv);
+
+      slideContainer.appendChild(wrapper);
     }
 
-    var fitScale = Math.min(maxWidth / tempResult.width, maxHeight / tempResult.height);
-    var effectiveZoom = fitScale * tab.zoomLevel;
+    updatePannable();
+    await renderVisiblePages();
+    updateSlideCounter();
+    updateThumbnailHighlight();
+  }
 
-    // Render to an offscreen canvas first, then copy to the visible canvas
-    // in one step. This prevents the visual glitch where the old content is
-    // cleared/resized before the new content is ready.
-    var offscreen = document.createElement('canvas');
-    await PdfRenderer.renderSlide(offscreen, tab.currentSlide, effectiveZoom);
-
-    // Now swap: resize visible canvas and blit the finished frame
-    slideCanvas.width = offscreen.width;
-    slideCanvas.height = offscreen.height;
-    slideCanvas.style.width = offscreen.style.width;
-    slideCanvas.style.height = offscreen.style.height;
-    var ctx = slideCanvas.getContext('2d');
-    ctx.drawImage(offscreen, 0, 0);
-
-    await PdfRenderer.renderTextLayer(textLayer, tab.currentSlide, effectiveZoom);
-
-    clearTimeout(renderTimer);
-    slideSpinner.classList.add('hidden');
-
-    // When zoomed in beyond fit, add padding and enable pan cursor
-    var canvasW = slideCanvas.offsetWidth;
-    var canvasH = slideCanvas.offsetHeight;
-    var isZoomedBeyondFit = canvasW > mainView.clientWidth || canvasH > mainView.clientHeight;
-    slideContainer.style.padding = isZoomedBeyondFit ? '20px' : '0';
-    if (isZoomedBeyondFit) {
+  function updatePannable() {
+    var mainView = document.getElementById('main-view');
+    var slideContainer = document.getElementById('slide-container');
+    var isWider = slideContainer.scrollWidth > mainView.clientWidth;
+    if (isWider) {
       mainView.classList.add('pannable');
     } else {
       mainView.classList.remove('pannable');
     }
+  }
 
-    updateSlideCounter();
-    updateThumbnailHighlight();
+  async function renderVisiblePages() {
+    var tab = getActiveTab();
+    if (!tab || !pageBaseDims) return;
+
+    var gen = renderGeneration;
+    var mainView = document.getElementById('main-view');
+    var wrappers = document.querySelectorAll('#slide-container .page-wrapper');
+
+    var viewTop = mainView.scrollTop;
+    var viewBottom = viewTop + mainView.clientHeight;
+    var buffer = mainView.clientHeight; // 1 screen buffer above and below
+
+    var maxWidth = mainView.clientWidth - 40;
+    var fitScale = maxWidth / pageBaseDims.width;
+    var effectiveZoom = fitScale * tab.zoomLevel;
+
+    for (var i = 0; i < wrappers.length; i++) {
+      if (gen !== renderGeneration) return; // zoom/tab changed, abort stale render
+
+      var wrapper = wrappers[i];
+      var wTop = wrapper.offsetTop;
+      var wBottom = wTop + wrapper.offsetHeight;
+      var pageNum = parseInt(wrapper.dataset.page);
+
+      // Check if page is in visible range (with buffer)
+      if (wBottom >= viewTop - buffer && wTop <= viewBottom + buffer) {
+        if (!renderedPages.has(pageNum)) {
+          renderedPages.add(pageNum);
+
+          try {
+            var canvas = wrapper.querySelector('.page-canvas');
+            var textLayerEl = wrapper.querySelector('.page-text-layer');
+
+            // Render to offscreen canvas, then blit — prevents flash
+            var offscreen = document.createElement('canvas');
+            await PdfRenderer.renderSlide(offscreen, pageNum, effectiveZoom);
+
+            if (gen !== renderGeneration) return; // stale, discard
+
+            canvas.width = offscreen.width;
+            canvas.height = offscreen.height;
+            canvas.style.width = offscreen.style.width;
+            canvas.style.height = offscreen.style.height;
+            var ctx = canvas.getContext('2d');
+            ctx.drawImage(offscreen, 0, 0);
+
+            await PdfRenderer.renderTextLayer(textLayerEl, pageNum, effectiveZoom);
+          } catch (err) {
+            renderedPages.delete(pageNum); // allow retry on next scroll
+          }
+        }
+      }
+    }
+  }
+
+  function updateCurrentPageFromScroll() {
+    var tab = getActiveTab();
+    if (!tab || tab.totalSlides === 0) return;
+
+    var mainView = document.getElementById('main-view');
+    var wrappers = document.querySelectorAll('#slide-container .page-wrapper');
+    if (wrappers.length === 0) return;
+
+    var viewMid = mainView.scrollTop + mainView.clientHeight / 2;
+
+    var currentPage = 1;
+    for (var i = 0; i < wrappers.length; i++) {
+      var wrapper = wrappers[i];
+      if (wrapper.offsetTop + wrapper.offsetHeight / 2 >= viewMid) {
+        currentPage = i + 1;
+        break;
+      }
+      currentPage = i + 1;
+    }
+
+    if (tab.currentSlide !== currentPage) {
+      tab.currentSlide = currentPage;
+      updateSlideCounter();
+      updateThumbnailHighlight();
+    }
+  }
+
+  // Recalculate page sizes and re-render visible pages (used after zoom, resize, layout changes)
+  function refreshView() {
+    var tab = getActiveTab();
+    if (!tab || tab.totalSlides === 0 || !pageBaseDims) return;
+
+    renderedPages.clear();
+    renderGeneration++;
+
+    var mainView = document.getElementById('main-view');
+    var maxWidth = mainView.clientWidth - 40;
+    var fitScale = maxWidth / pageBaseDims.width;
+    var effectiveZoom = fitScale * tab.zoomLevel;
+    var cssWidth = pageBaseDims.width * effectiveZoom;
+    var cssHeight = pageBaseDims.height * effectiveZoom;
+
+    var wrappers = document.querySelectorAll('#slide-container .page-wrapper');
+    for (var i = 0; i < wrappers.length; i++) {
+      wrappers[i].style.width = cssWidth + 'px';
+      wrappers[i].style.height = cssHeight + 'px';
+      // Clear rendered content so it re-renders at new zoom
+      var canvas = wrappers[i].querySelector('.page-canvas');
+      canvas.width = 0;
+      canvas.height = 0;
+      wrappers[i].querySelector('.page-text-layer').innerHTML = '';
+    }
+
+    updatePannable();
+    renderVisiblePages();
   }
 
   async function renderAllThumbnails(tab) {
@@ -570,8 +683,18 @@
     var tab = getActiveTab();
     if (!tab || num < 1 || num > tab.totalSlides) return;
     tab.currentSlide = num;
-    renderCurrentSlide();
+
+    var wrappers = document.querySelectorAll('#slide-container .page-wrapper');
+    if (wrappers[num - 1]) {
+      wrappers[num - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    updateSlideCounter();
+    updateThumbnailHighlight();
     showFsCounter();
+
+    // Render the target page and its neighbours if not yet rendered
+    renderVisiblePages();
   }
 
   function prevSlide() {
@@ -590,7 +713,7 @@
     if (!tab) return;
     tab.zoomLevel = Math.max(0.25, Math.min(4, level));
     updateZoomDisplay();
-    renderCurrentSlide();
+    refreshView();
   }
 
   function zoomIn() {
@@ -663,7 +786,7 @@
     } else {
       sidebar.classList.add('sidebar-hidden');
     }
-    setTimeout(function () { renderCurrentSlide(); }, 50);
+    setTimeout(function () { refreshView(); }, 50);
   }
 
   // ---- Collapse tab bar + toolbar ----
@@ -674,7 +797,7 @@
     } else {
       viewer.classList.remove('bars-collapsed');
     }
-    setTimeout(function () { renderCurrentSlide(); }, 50);
+    setTimeout(function () { refreshView(); }, 50);
   }
 
   // ---- Fullscreen ----
@@ -693,7 +816,7 @@
       fsCounter.classList.add('hidden');
     }
 
-    setTimeout(function () { renderCurrentSlide(); }, 100);
+    setTimeout(function () { refreshView(); }, 100);
   }
 
   function showFsCounter() {
@@ -827,17 +950,15 @@
       }
     });
 
-    // Click on slide area no longer advances slides — navigation is via
-    // toolbar buttons, keyboard arrows, or thumbnail clicks only.
-
-    // Pan with mouse drag when zoomed in
+    // Pan with mouse drag when zoomed wider than viewport
     var mainViewEl = document.getElementById('main-view');
 
     mainViewEl.addEventListener('mousedown', function (e) {
       if (!mainViewEl.classList.contains('pannable')) return;
       if (e.button !== 0) return; // left click only
       // Don't pan when the user is clicking on text — let the browser handle selection
-      if (e.target !== textLayer && textLayer.contains(e.target)) return;
+      var closestTextLayer = e.target.closest('.page-text-layer');
+      if (closestTextLayer && e.target !== closestTextLayer) return;
       isPanning = true;
       didPan = false;
       panStartX = e.clientX;
@@ -863,6 +984,15 @@
       mainViewEl.classList.remove('panning');
     });
 
+    // Scroll handler — update current page indicator and lazily render pages
+    mainViewEl.addEventListener('scroll', function () {
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(function () {
+        updateCurrentPageFromScroll();
+        renderVisiblePages();
+      }, 50);
+    });
+
     mainViewEl.addEventListener('wheel', function (e) {
       var tab = getActiveTab();
       if (e.ctrlKey && tab && tab.totalSlides > 0) {
@@ -876,7 +1006,7 @@
       clearTimeout(resizeTimeout);
       resizeTimeout = setTimeout(function () {
         var tab = getActiveTab();
-        if (tab && tab.totalSlides > 0) renderCurrentSlide();
+        if (tab && tab.totalSlides > 0) refreshView();
       }, 150);
     });
 

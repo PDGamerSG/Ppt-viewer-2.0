@@ -507,7 +507,6 @@ body {
 /* Main View */
 #main-view {
   flex: 1;
-  display: flex;
   background: var(--bg-primary);
   overflow: auto;
   position: relative;
@@ -539,11 +538,11 @@ body {
   cursor: grabbing;
 }
 
-#main-view.pannable #slide-canvas {
+#main-view.pannable .page-canvas {
   cursor: grab;
 }
 
-#main-view.panning #slide-canvas {
+#main-view.panning .page-canvas {
   cursor: grabbing;
 }
 
@@ -558,26 +557,27 @@ body {
 
 #slide-container {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  margin: auto;
-  flex-shrink: 0;
+  gap: 20px;
+  padding: 20px;
 }
 
-#slide-wrapper {
+/* Per-page wrapper for continuous scroll */
+.page-wrapper {
   position: relative;
-  display: inline-block;
+  flex-shrink: 0;
   line-height: 0;
-}
-
-#slide-canvas {
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
   background: #fff;
+}
+
+.page-canvas {
   display: block;
 }
 
-/* PDF text layer overlay */
-#text-layer {
+/* PDF text layer overlay (per page) */
+.page-text-layer {
   position: absolute;
   top: 0;
   left: 0;
@@ -586,7 +586,6 @@ body {
   overflow: hidden;
   opacity: 1;
   line-height: 1;
-  /* Prevent browser from adjusting text sizes — breaks PDF.js calc() positioning */
   -webkit-text-size-adjust: none;
   text-size-adjust: none;
   -webkit-user-select: text;
@@ -594,7 +593,7 @@ body {
   cursor: default;
 }
 
-#text-layer span {
+.page-text-layer span {
   color: transparent;
   position: absolute;
   white-space: pre;
@@ -604,17 +603,17 @@ body {
   cursor: text;
 }
 
-#text-layer ::selection {
+.page-text-layer ::selection {
   background: rgba(0, 120, 212, 0.35);
   color: transparent;
 }
 
 /* In pannable mode, empty text-layer areas show grab cursor */
-#main-view.pannable #text-layer {
+#main-view.pannable .page-text-layer {
   cursor: grab;
 }
 
-#main-view.panning #text-layer {
+#main-view.panning .page-text-layer {
   cursor: grabbing;
 }
 
