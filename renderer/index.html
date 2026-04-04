@@ -11,7 +11,7 @@
   <div id="loading-overlay" class="hidden">
     <div class="loading-content">
       <div class="spinner"></div>
-      <p>Loading...</p>
+      <p>Loading…</p>
     </div>
   </div>
 
@@ -28,8 +28,15 @@
   <!-- LibreOffice Missing Screen -->
   <div id="libreoffice-screen" class="hidden">
     <div class="onboarding-card">
-      <div class="onboarding-icon">📄</div>
-      <h1>LibreOffice is required to use PPT Viewer</h1>
+      <div class="onboarding-icon">
+        <svg viewBox="0 0 48 48" width="64" height="64" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-secondary)">
+          <rect x="8" y="4" width="32" height="40" rx="3"/>
+          <line x1="16" y1="16" x2="32" y2="16"/>
+          <line x1="16" y1="22" x2="32" y2="22"/>
+          <line x1="16" y1="28" x2="24" y2="28"/>
+        </svg>
+      </div>
+      <h1>LibreOffice Required</h1>
       <p class="onboarding-desc">PPT Viewer uses LibreOffice to convert your slides. It's free and takes 2 minutes to install.</p>
       <button id="download-lo-btn" class="btn btn-primary btn-large">Download LibreOffice (Free)</button>
       <button id="refresh-lo-btn" class="btn btn-secondary">I've installed it — Refresh</button>
@@ -49,8 +56,14 @@
       <h1 class="app-title">PPT Viewer</h1>
       <p class="app-subtitle">Fast, native PowerPoint viewer</p>
       <div id="drop-zone" class="drop-zone">
-        <div class="drop-icon">📂</div>
-        <p>Drag & drop a .pptx, .ppt, or .pdf file here</p>
+        <div class="drop-icon">
+          <svg viewBox="0 0 48 48" width="52" height="52" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--text-secondary)">
+            <path d="M6 36V12a2 2 0 0 1 2-2h14l4 4h14a2 2 0 0 1 2 2v20a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2z"/>
+            <line x1="24" y1="21" x2="24" y2="33"/>
+            <polyline points="20,25 24,21 28,25"/>
+          </svg>
+        </div>
+        <p>Drag &amp; drop a .pptx, .ppt, or .pdf file here</p>
         <p class="drop-hint">or</p>
         <button id="welcome-open-btn" class="btn btn-primary">Open File</button>
       </div>
@@ -63,78 +76,256 @@
 
   <!-- Main Viewer -->
   <div id="viewer" class="hidden">
-    <!-- Tab Bar (also the drag region / title bar) -->
+
+    <!-- Tab Bar (drag region / custom title bar) -->
     <div id="tab-bar">
       <div id="tab-list"></div>
-      <button id="tab-open-btn" class="tab-add-btn" title="Open new file (Ctrl+O)">+</button>
+      <button id="tab-open-btn" class="tab-add-btn" title="Open new file (Ctrl+O)">
+        <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <line x1="8" y1="3" x2="8" y2="13"/>
+          <line x1="3" y1="8" x2="13" y2="8"/>
+        </svg>
+      </button>
       <div class="tab-bar-drag"></div>
-      <!-- Custom window controls -->
+
+      <!-- Custom window controls (Windows 11 style) -->
       <div id="win-controls">
-        <button id="win-minimize" title="Minimize">&#x2212;</button>
-        <button id="win-maximize" title="Maximize / Restore">&#x25A1;</button>
-        <button id="win-close" title="Close">&#x2715;</button>
+        <button id="win-minimize" title="Minimize">
+          <svg viewBox="0 0 10 1" width="10" height="1" xmlns="http://www.w3.org/2000/svg">
+            <rect width="10" height="1" fill="currentColor"/>
+          </svg>
+        </button>
+        <button id="win-maximize" title="Maximize">
+          <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" stroke-width="1" xmlns="http://www.w3.org/2000/svg">
+            <rect x="0.5" y="0.5" width="9" height="9"/>
+          </svg>
+        </button>
+        <button id="win-close" title="Close">
+          <svg viewBox="0 0 10 10" width="10" height="10" xmlns="http://www.w3.org/2000/svg">
+            <line x1="0.5" y1="0.5" x2="9.5" y2="9.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
+            <line x1="9.5" y1="0.5" x2="0.5" y2="9.5" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/>
+          </svg>
+        </button>
       </div>
     </div>
 
-    <!-- Hamburger dropdown menu -->
+    <!-- Hamburger dropdown -->
     <div id="hamburger-menu" class="hidden">
       <div class="hmenu-section">File</div>
-      <button class="hmenu-item" id="hmenu-open">📂 Open File <span class="hmenu-kbd">Ctrl+O</span></button>
+      <button class="hmenu-item" id="hmenu-open">
+        <span class="hmenu-icon">
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5.5A1.5 1.5 0 0 1 3.5 4H6l1.5 2H12a1.5 1.5 0 0 1 1.5 1.5v4A1.5 1.5 0 0 1 12 13H3.5A1.5 1.5 0 0 1 2 11.5z"/></svg>
+        </span>
+        Open File
+        <span class="hmenu-kbd">Ctrl+O</span>
+      </button>
       <div class="hmenu-sep"></div>
-      <button class="hmenu-item" id="hmenu-exit">✕ Exit</button>
+      <button class="hmenu-item" id="hmenu-exit">
+        <span class="hmenu-icon">
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3h3.5a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5H10"/><polyline points="7,5 10,8 7,11"/><line x1="1.5" y1="8" x2="10" y2="8"/></svg>
+        </span>
+        Exit
+      </button>
       <div class="hmenu-section">View</div>
-      <button class="hmenu-item" id="hmenu-sidebar">☰ Toggle Sidebar <span class="hmenu-kbd">Ctrl+B</span></button>
-      <button class="hmenu-item" id="hmenu-bars">▲ Toggle Toolbar <span class="hmenu-kbd">Ctrl+H</span></button>
-      <button class="hmenu-item" id="hmenu-present">▶ Present <span class="hmenu-kbd">F5</span></button>
-      <button class="hmenu-item" id="hmenu-doc-dark">🌙 Document Dark Mode <span class="hmenu-kbd">I</span></button>
+      <button class="hmenu-item" id="hmenu-sidebar">
+        <span class="hmenu-icon">
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/><line x1="5.5" y1="2.5" x2="5.5" y2="13.5"/></svg>
+        </span>
+        Toggle Sidebar
+        <span class="hmenu-kbd">Ctrl+B</span>
+      </button>
+      <button class="hmenu-item" id="hmenu-bars">
+        <span class="hmenu-icon">
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="4" width="13" height="8" rx="1.5"/><line x1="1.5" y1="7.5" x2="14.5" y2="7.5"/></svg>
+        </span>
+        Toggle Toolbar
+        <span class="hmenu-kbd">Ctrl+H</span>
+      </button>
+      <button class="hmenu-item" id="hmenu-present">
+        <span class="hmenu-icon">
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="currentColor"><path d="M3.5 2.5l9 5.5-9 5.5z"/></svg>
+        </span>
+        Present
+        <span class="hmenu-kbd">F5</span>
+      </button>
+      <button class="hmenu-item" id="hmenu-doc-dark">
+        <span class="hmenu-icon">
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M13.5 10.5A5.5 5.5 0 0 1 5.5 2.5a5.5 5.5 0 1 0 8 8z"/></svg>
+        </span>
+        Document Dark Mode
+        <span class="hmenu-kbd">I</span>
+      </button>
       <div class="hmenu-sep"></div>
-      <button class="hmenu-item" id="hmenu-devtools">⚙ Developer Tools</button>
+      <button class="hmenu-item" id="hmenu-devtools">
+        <span class="hmenu-icon">
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="4,5 1.5,8 4,11"/><polyline points="12,5 14.5,8 12,11"/><line x1="9.5" y1="3.5" x2="6.5" y2="12.5"/></svg>
+        </span>
+        Developer Tools
+      </button>
       <div class="hmenu-section">Help</div>
-      <button class="hmenu-item" id="hmenu-about">ℹ About PPT Viewer</button>
-      <button class="hmenu-item" id="hmenu-cache">🗑 Clear Cache</button>
+      <button class="hmenu-item" id="hmenu-about">
+        <span class="hmenu-icon">
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="6"/><line x1="8" y1="7.5" x2="8" y2="11"/><circle cx="8" cy="5" r="0.5" fill="currentColor" stroke="none"/></svg>
+        </span>
+        About PPT Viewer
+      </button>
+      <button class="hmenu-item" id="hmenu-cache">
+        <span class="hmenu-icon">
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="3,5 13,5"/><path d="M6,5V3.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5V5"/><rect x="4" y="5" width="8" height="8" rx="1"/><line x1="6.5" y1="8" x2="6.5" y2="10.5"/><line x1="9.5" y1="8" x2="9.5" y2="10.5"/></svg>
+        </span>
+        Clear Cache
+      </button>
     </div>
 
     <!-- Toolbar -->
     <div id="toolbar">
-      <button id="toolbar-hamburger" class="toolbar-btn toolbar-icon-btn" title="Menu">&#9776;</button>
-      <button id="toolbar-open" class="toolbar-btn toolbar-icon-btn" title="Open File (Ctrl+O)">📂</button>
+
+      <!-- Menu -->
+      <button id="toolbar-hamburger" class="toolbar-btn toolbar-icon-btn" title="Menu">
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+          <line x1="2.5" y1="4.5" x2="13.5" y2="4.5"/>
+          <line x1="2.5" y1="8" x2="13.5" y2="8"/>
+          <line x1="2.5" y1="11.5" x2="13.5" y2="11.5"/>
+        </svg>
+      </button>
+
+      <!-- Open -->
+      <button id="toolbar-open" class="toolbar-btn toolbar-icon-btn" title="Open File (Ctrl+O)">
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 5.5A1.5 1.5 0 0 1 3.5 4H6l1.5 2H12a1.5 1.5 0 0 1 1.5 1.5v4A1.5 1.5 0 0 1 12 13H3.5A1.5 1.5 0 0 1 2 11.5z"/>
+        </svg>
+      </button>
+
       <div class="toolbar-sep"></div>
-      <button id="toolbar-toggle-sidebar" class="toolbar-btn" title="Toggle Sidebar (Ctrl+B)">☰</button>
+
+      <!-- Sidebar toggle -->
+      <button id="toolbar-toggle-sidebar" class="toolbar-btn toolbar-icon-btn" title="Toggle Sidebar (Ctrl+B)">
+        <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/>
+          <line x1="5.5" y1="2.5" x2="5.5" y2="13.5"/>
+        </svg>
+      </button>
+
       <div class="toolbar-sep"></div>
-      <button id="toolbar-prev" class="toolbar-btn toolbar-icon-btn" title="Previous Slide (←)">❮</button>
+
+      <!-- Navigation -->
+      <button id="toolbar-prev" class="toolbar-btn toolbar-icon-btn" title="Previous Slide (←)">
+        <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="10,3 5,8 10,13"/>
+        </svg>
+      </button>
       <div class="toolbar-page-box">
         <input id="toolbar-page-input" class="toolbar-page-input" type="number" min="1" value="1" title="Go to page">
         <span class="toolbar-page-sep">/</span>
         <span id="toolbar-page-total">1</span>
       </div>
-      <button id="toolbar-next" class="toolbar-btn toolbar-icon-btn" title="Next Slide (→)">❯</button>
+      <button id="toolbar-next" class="toolbar-btn toolbar-icon-btn" title="Next Slide (→)">
+        <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6,3 11,8 6,13"/>
+        </svg>
+      </button>
+
       <div class="toolbar-sep"></div>
-      <button id="toolbar-zoom-out" class="toolbar-btn toolbar-icon-btn" title="Zoom Out (Ctrl+-)">−</button>
+
+      <!-- Zoom -->
+      <button id="toolbar-zoom-out" class="toolbar-btn toolbar-icon-btn" title="Zoom Out (Ctrl+-)">
+        <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <circle cx="7" cy="7" r="4.5"/>
+          <line x1="10.5" y1="10.5" x2="14" y2="14"/>
+          <line x1="4.5" y1="7" x2="9.5" y2="7"/>
+        </svg>
+      </button>
       <span id="toolbar-zoom" class="toolbar-zoom-val">100%</span>
-      <button id="toolbar-zoom-in" class="toolbar-btn toolbar-icon-btn" title="Zoom In (Ctrl+=)">+</button>
-      <button id="toolbar-zoom-reset" class="toolbar-btn toolbar-icon-btn" title="Fit Width">⊡</button>
+      <button id="toolbar-zoom-in" class="toolbar-btn toolbar-icon-btn" title="Zoom In (Ctrl+=)">
+        <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <circle cx="7" cy="7" r="4.5"/>
+          <line x1="10.5" y1="10.5" x2="14" y2="14"/>
+          <line x1="7" y1="4.5" x2="7" y2="9.5"/>
+          <line x1="4.5" y1="7" x2="9.5" y2="7"/>
+        </svg>
+      </button>
+      <button id="toolbar-zoom-reset" class="toolbar-btn toolbar-icon-btn" title="Fit Width">
+        <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9.5,2 13.5,2 13.5,6"/>
+          <polyline points="6.5,14 2.5,14 2.5,10"/>
+          <line x1="13.5" y1="2" x2="9" y2="7"/>
+          <line x1="2.5" y1="14" x2="7" y2="9"/>
+        </svg>
+      </button>
+
       <div class="toolbar-sep"></div>
-      <button id="toolbar-rotate-left" class="toolbar-btn toolbar-icon-btn" title="Rotate Left">↺</button>
-      <button id="toolbar-rotate-right" class="toolbar-btn toolbar-icon-btn" title="Rotate Right">↻</button>
+
+      <!-- Rotate -->
+      <button id="toolbar-rotate-left" class="toolbar-btn toolbar-icon-btn" title="Rotate Left">
+        <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3.5 8.5a4.5 4.5 0 1 0 1-3"/>
+          <polyline points="2,3.5 4.5,6 7,3.5"/>
+        </svg>
+      </button>
+      <button id="toolbar-rotate-right" class="toolbar-btn toolbar-icon-btn" title="Rotate Right">
+        <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12.5 8.5a4.5 4.5 0 1 1-1-3"/>
+          <polyline points="14,3.5 11.5,6 9,3.5"/>
+        </svg>
+      </button>
+
       <div class="toolbar-sep"></div>
+
+      <!-- Find -->
       <span class="toolbar-label">Find:</span>
       <input id="find-input" class="toolbar-find-input" type="text" placeholder="Search…" autocomplete="off" spellcheck="false">
-      <button id="find-prev" class="toolbar-btn toolbar-icon-btn" title="Previous match (Shift+Enter)">‹</button>
-      <button id="find-next" class="toolbar-btn toolbar-icon-btn" title="Next match (Enter)">›</button>
-      <span id="find-count" class="toolbar-find-count"></span>
-      <div class="toolbar-sep"></div>
-      <button id="toolbar-present" class="toolbar-btn btn-accent" title="Present (F5)">▶ Present</button>
-      <div class="toolbar-sep"></div>
-      <button id="toolbar-doc-dark" class="toolbar-btn" title="Document Dark Mode (I)">
-        <span id="doc-dark-icon">🌙</span> <span id="doc-dark-label">Dark Read</span>
+      <button id="find-prev" class="toolbar-btn toolbar-icon-btn" title="Previous match (Shift+Enter)">
+        <svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3,10 8,5 13,10"/>
+        </svg>
       </button>
+      <button id="find-next" class="toolbar-btn toolbar-icon-btn" title="Next match (Enter)">
+        <svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3,6 8,11 13,6"/>
+        </svg>
+      </button>
+      <span id="find-count" class="toolbar-find-count"></span>
+
+      <div class="toolbar-sep"></div>
+
+      <!-- Present -->
+      <button id="toolbar-present" class="toolbar-btn btn-accent" title="Present (F5)">
+        <svg viewBox="0 0 16 16" width="11" height="11" fill="currentColor">
+          <path d="M3.5 2.5l9 5.5-9 5.5z"/>
+        </svg>
+        Present
+      </button>
+
+      <div class="toolbar-sep"></div>
+
+      <!-- Doc dark mode -->
+      <button id="toolbar-doc-dark" class="toolbar-btn" title="Document Dark Mode (I)">
+        <span id="doc-dark-icon">
+          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+            <path d="M13.5 10.5A5.5 5.5 0 0 1 5.5 2.5a5.5 5.5 0 1 0 8 8z"/>
+          </svg>
+        </span>
+        <span id="doc-dark-label">Dark Read</span>
+      </button>
+
       <div class="toolbar-spacer"></div>
-      <button id="collapse-bars-btn" class="toolbar-btn toolbar-icon-btn" title="Hide toolbar (Ctrl+H)">▲</button>
+
+      <!-- Collapse toolbar -->
+      <button id="collapse-bars-btn" class="toolbar-btn toolbar-icon-btn" title="Hide toolbar (Ctrl+H)">
+        <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3,10 8,5 13,10"/>
+        </svg>
+      </button>
     </div>
 
     <!-- Content Area -->
     <div id="content-area">
-      <button id="collapse-restore-btn" title="Show toolbar (Ctrl+H)">▼</button>
+      <button id="collapse-restore-btn" title="Show toolbar (Ctrl+H)">
+        <svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="3,6 8,11 13,6"/>
+        </svg>
+      </button>
+
       <!-- Thumbnail Sidebar -->
       <div id="sidebar">
         <div id="thumbnail-list"></div>
@@ -147,14 +338,13 @@
         </div>
         <div id="slide-container"></div>
       </div>
-
     </div>
   </div>
 
   <!-- Fullscreen Overlay Counter -->
   <div id="fs-counter" class="hidden">Slide 1 of 1</div>
 
-  <!-- Theme toggle toast -->
+  <!-- Toast -->
   <div id="theme-toast"></div>
 
   <script src="../node_modules/pdfjs-dist/build/pdf.min.js"></script>
