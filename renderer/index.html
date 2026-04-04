@@ -71,36 +71,41 @@
 
     <!-- Toolbar -->
     <div id="toolbar">
-      <button id="toolbar-open" class="toolbar-btn" title="Open File (Ctrl+O)">
-        <span>📂</span> Open
-      </button>
+      <button id="toolbar-open" class="toolbar-btn" title="Open File (Ctrl+O)">📂</button>
       <div class="toolbar-sep"></div>
-      <button id="toolbar-toggle-sidebar" class="toolbar-btn" title="Toggle Sidebar">
-        <span>☰</span> Sidebar
-      </button>
+      <button id="toolbar-toggle-sidebar" class="toolbar-btn" title="Toggle Sidebar (Ctrl+B)">☰</button>
       <div class="toolbar-sep"></div>
-      <button id="toolbar-prev" class="toolbar-btn" title="Previous Slide">◀</button>
-      <span id="toolbar-slide-counter" class="toolbar-text">Slide 1 of 1</span>
-      <button id="toolbar-next" class="toolbar-btn" title="Next Slide">▶</button>
+      <button id="toolbar-prev" class="toolbar-btn toolbar-icon-btn" title="Previous Slide (←)">❮</button>
+      <div class="toolbar-page-box">
+        <input id="toolbar-page-input" class="toolbar-page-input" type="number" min="1" value="1" title="Go to page">
+        <span class="toolbar-page-sep">/</span>
+        <span id="toolbar-page-total">1</span>
+      </div>
+      <button id="toolbar-next" class="toolbar-btn toolbar-icon-btn" title="Next Slide (→)">❯</button>
       <div class="toolbar-sep"></div>
-      <button id="toolbar-zoom-out" class="toolbar-btn" title="Zoom Out">−</button>
-      <span id="toolbar-zoom" class="toolbar-text">100%</span>
-      <button id="toolbar-zoom-in" class="toolbar-btn" title="Zoom In">+</button>
-      <button id="toolbar-zoom-reset" class="toolbar-btn" title="Reset Zoom">Fit</button>
+      <button id="toolbar-zoom-out" class="toolbar-btn toolbar-icon-btn" title="Zoom Out (Ctrl+-)">−</button>
+      <span id="toolbar-zoom" class="toolbar-zoom-val">100%</span>
+      <button id="toolbar-zoom-in" class="toolbar-btn toolbar-icon-btn" title="Zoom In (Ctrl+=)">+</button>
+      <button id="toolbar-zoom-reset" class="toolbar-btn toolbar-icon-btn" title="Fit Width">⊡</button>
       <div class="toolbar-sep"></div>
-      <button id="toolbar-present" class="toolbar-btn btn-accent" title="Present (F5)">
-        <span>▶</span> Present
-      </button>
+      <button id="toolbar-rotate-left" class="toolbar-btn toolbar-icon-btn" title="Rotate Left">↺</button>
+      <button id="toolbar-rotate-right" class="toolbar-btn toolbar-icon-btn" title="Rotate Right">↻</button>
       <div class="toolbar-sep"></div>
-      <button id="toolbar-clear-cache" class="toolbar-btn" title="Clear converted PDF cache">
-        <span>🗑</span> Clear Cache
-      </button>
+      <span class="toolbar-label">Find:</span>
+      <input id="find-input" class="toolbar-find-input" type="text" placeholder="Search…" autocomplete="off" spellcheck="false">
+      <button id="find-prev" class="toolbar-btn toolbar-icon-btn" title="Previous match (Shift+Enter)">‹</button>
+      <button id="find-next" class="toolbar-btn toolbar-icon-btn" title="Next match (Enter)">›</button>
+      <span id="find-count" class="toolbar-find-count"></span>
       <div class="toolbar-sep"></div>
-      <button id="toolbar-doc-dark" class="toolbar-btn" title="Invert document colors (I)">
+      <button id="toolbar-present" class="toolbar-btn btn-accent" title="Present (F5)">▶ Present</button>
+      <div class="toolbar-sep"></div>
+      <button id="toolbar-doc-dark" class="toolbar-btn" title="Document Dark Mode (I)">
         <span id="doc-dark-icon">🌙</span> <span id="doc-dark-label">Dark Read</span>
       </button>
+      <div class="toolbar-sep"></div>
+      <button id="toolbar-clear-cache" class="toolbar-btn toolbar-icon-btn" title="Clear converted PDF cache">🗑</button>
       <div class="toolbar-spacer"></div>
-      <button id="collapse-bars-btn" class="toolbar-btn" title="Hide toolbar (Ctrl+H)">▲</button>
+      <button id="collapse-bars-btn" class="toolbar-btn toolbar-icon-btn" title="Hide toolbar (Ctrl+H)">▲</button>
     </div>
 
     <!-- Content Area -->

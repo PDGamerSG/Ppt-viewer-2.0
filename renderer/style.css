@@ -348,17 +348,17 @@ body {
 #toolbar {
   display: flex;
   align-items: center;
-  height: 40px;
+  height: 34px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border);
-  padding: 0 8px;
-  gap: 4px;
+  padding: 0 6px;
+  gap: 2px;
   flex-shrink: 0;
   -webkit-app-region: no-drag;
 }
 
 .toolbar-btn {
-  padding: 4px 12px;
+  padding: 3px 10px;
   background: transparent;
   border: none;
   color: var(--text-primary);
@@ -370,6 +370,8 @@ body {
   align-items: center;
   gap: 4px;
   transition: background 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .toolbar-btn:hover {
@@ -385,23 +387,122 @@ body {
   background: var(--accent-hover);
 }
 
-.toolbar-text {
-  font-size: 13px;
+/* Icon-only buttons — tighter padding */
+.toolbar-icon-btn {
+  padding: 3px 7px;
+}
+
+/* Page navigation box */
+.toolbar-page-box {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
   color: var(--text-secondary);
-  padding: 0 8px;
+  padding: 0 2px;
+}
+
+.toolbar-page-input {
+  width: 34px;
+  padding: 2px 4px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  text-align: center;
+  -moz-appearance: textfield;
+}
+
+.toolbar-page-input::-webkit-outer-spin-button,
+.toolbar-page-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
+
+.toolbar-page-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.toolbar-page-sep {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+#toolbar-page-total {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* Zoom value display */
+.toolbar-zoom-val {
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-width: 38px;
+  text-align: center;
+}
+
+/* Find bar */
+.toolbar-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  padding: 0 2px 0 4px;
+}
+
+.toolbar-find-input {
+  width: 140px;
+  padding: 2px 7px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+.toolbar-find-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.toolbar-find-input.find-has-results {
+  border-color: var(--success);
+}
+
+.toolbar-find-input.find-no-results {
+  border-color: var(--danger);
+  background: rgba(211, 47, 47, 0.1);
+}
+
+.toolbar-find-count {
+  font-size: 11px;
+  color: var(--text-secondary);
+  min-width: 52px;
+  padding: 0 2px;
   white-space: nowrap;
 }
 
 .toolbar-sep {
   width: 1px;
-  height: 20px;
+  height: 18px;
   background: var(--border);
-  margin: 0 4px;
+  margin: 0 3px;
+  flex-shrink: 0;
 }
 
 /* Toolbar spacer pushes collapse btn to the right */
 .toolbar-spacer {
   flex: 1;
+}
+
+/* Rotate button emphasis when rotated */
+#toolbar-rotate-left.rotated,
+#toolbar-rotate-right.rotated {
+  color: var(--accent);
 }
 
 /* Collapsed state — hide tab bar and toolbar, show floating restore arrow */
@@ -605,6 +706,18 @@ body {
 .page-text-layer ::selection {
   background: rgba(0, 120, 212, 0.35);
   color: transparent;
+}
+
+/* Find text highlights */
+.page-text-layer span.find-match {
+  background: rgba(255, 213, 0, 0.45);
+  border-radius: 2px;
+}
+
+.page-text-layer span.find-match-active {
+  background: rgba(255, 140, 0, 0.65);
+  border-radius: 2px;
+  outline: 1px solid rgba(255, 140, 0, 0.9);
 }
 
 /* In pannable mode, empty text-layer areas show grab cursor */

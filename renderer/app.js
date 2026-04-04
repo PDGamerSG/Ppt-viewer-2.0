@@ -61,12 +61,21 @@
   var toolbarToggleSidebar = document.getElementById('toolbar-toggle-sidebar');
   var toolbarPrev = document.getElementById('toolbar-prev');
   var toolbarNext = document.getElementById('toolbar-next');
-  var toolbarSlideCounter = document.getElementById('toolbar-slide-counter');
+  var toolbarPageInput = document.getElementById('toolbar-page-input');
+  var toolbarPageTotal = document.getElementById('toolbar-page-total');
   var toolbarZoomIn = document.getElementById('toolbar-zoom-in');
   var toolbarZoomOut = document.getElementById('toolbar-zoom-out');
   var toolbarZoomReset = document.getElementById('toolbar-zoom-reset');
   var toolbarZoom = document.getElementById('toolbar-zoom');
   var toolbarPresent = document.getElementById('toolbar-present');
+  var toolbarRotateLeft = document.getElementById('toolbar-rotate-left');
+  var toolbarRotateRight = document.getElementById('toolbar-rotate-right');
+
+  // Find bar
+  var findInput = document.getElementById('find-input');
+  var findPrevBtn = document.getElementById('find-prev');
+  var findNextBtn = document.getElementById('find-next');
+  var findCount = document.getElementById('find-count');
 
   // Welcome screen
   var dropZone = document.getElementById('drop-zone');
@@ -341,6 +350,14 @@
   }
 
   async function restoreTab(tab) {
+    // Clear find state for the new tab
+    findInput.value = '';
+    findTerm = '';
+    findMatches = [];
+    findCurrentIdx = -1;
+    findCount.textContent = '';
+    findInput.classList.remove('find-has-results', 'find-no-results');
+
     PdfRenderer.cleanup();
     await PdfRenderer.loadDocument(tab.pdfData);
 
@@ -352,6 +369,7 @@
 
     updateSlideCounter();
     updateZoomDisplay();
+    updateRotateButtons();
     window.api.setTitle(tab.fileName + ' \u2014 PPT Viewer');
     await setupContinuousView(tab);
 
@@ -449,6 +467,7 @@
       currentSlide: 1,
       totalSlides: 0,
       zoomLevel: 1,
+      pageRotation: 0,
       thumbnailDataUrls: [],
       loading: true,
     };
@@ -530,7 +549,7 @@
     if (tab.totalSlides === 0) return;
 
     // Get base dimensions from first page (all PPT slides share dimensions)
-    pageBaseDims = await PdfRenderer.getPageDimensions(1);
+    pageBaseDims = await PdfRenderer.getPageDimensions(1, tab.pageRotation);
     if (!pageBaseDims) return;
 
     var mainView = document.getElementById('main-view');
@@ -611,7 +630,7 @@
 
             // Render to offscreen canvas, then blit — prevents flash
             var offscreen = document.createElement('canvas');
-            await PdfRenderer.renderSlide(offscreen, pageNum, effectiveZoom);
+            await PdfRenderer.renderSlide(offscreen, pageNum, effectiveZoom, tab.pageRotation);
 
             if (gen !== renderGeneration) return; // stale, discard
 
@@ -622,7 +641,9 @@
             var ctx = canvas.getContext('2d');
             ctx.drawImage(offscreen, 0, 0);
 
-            await PdfRenderer.renderTextLayer(textLayerEl, pageNum, effectiveZoom);
+            await PdfRenderer.renderTextLayer(textLayerEl, pageNum, effectiveZoom, tab.pageRotation);
+            if (docDarkMode) applyDocDark();
+            applyFindHighlights();
           } catch (err) {
             renderedPages.delete(pageNum); // allow retry on next scroll
           }
@@ -659,9 +680,13 @@
   }
 
   // Recalculate page sizes and re-render visible pages (used after zoom, resize, layout changes)
-  function refreshView() {
+  async function refreshView() {
     var tab = getActiveTab();
-    if (!tab || tab.totalSlides === 0 || !pageBaseDims) return;
+    if (!tab || tab.totalSlides === 0) return;
+
+    // Re-fetch dimensions in case rotation changed
+    pageBaseDims = await PdfRenderer.getPageDimensions(1, tab.pageRotation);
+    if (!pageBaseDims) return;
 
     renderedPages.clear();
     renderGeneration++;
@@ -697,7 +722,7 @@
       item.className = 'thumbnail-item' + (i === tab.currentSlide ? ' active' : '');
       item.dataset.page = i;
 
-      var canvas = await PdfRenderer.renderThumbnail(i, 160);
+      var canvas = await PdfRenderer.renderThumbnail(i, 160, tab.pageRotation);
       if (canvas) {
         tab.thumbnailDataUrls.push(canvas.toDataURL('image/png'));
         item.appendChild(canvas);
@@ -795,17 +820,155 @@
     toolbarZoom.textContent = pct;
   }
 
+  // ---- Rotation ----
+  function rotateLeft() {
+    var tab = getActiveTab();
+    if (!tab || tab.totalSlides === 0) return;
+    tab.pageRotation = ((tab.pageRotation - 90) + 360) % 360;
+    tab.thumbnailDataUrls = []; // invalidate thumbnail cache
+    updateRotateButtons();
+    refreshView();
+    renderAllThumbnails(tab);
+  }
+
+  function rotateRight() {
+    var tab = getActiveTab();
+    if (!tab || tab.totalSlides === 0) return;
+    tab.pageRotation = (tab.pageRotation + 90) % 360;
+    tab.thumbnailDataUrls = [];
+    updateRotateButtons();
+    refreshView();
+    renderAllThumbnails(tab);
+  }
+
+  function updateRotateButtons() {
+    var tab = getActiveTab();
+    var rotated = tab && tab.pageRotation !== 0;
+    toolbarRotateLeft.classList.toggle('rotated', rotated);
+    toolbarRotateRight.classList.toggle('rotated', rotated);
+  }
+
+  // ---- Find text ----
+  var findTerm = '';
+  var findMatches = [];
+  var findCurrentIdx = -1;
+  var findDebounceTimer = null;
+
+  function openFind() {
+    findInput.focus();
+    findInput.select();
+  }
+
+  function runFind() {
+    clearFindHighlights();
+    findMatches = [];
+    findCurrentIdx = -1;
+
+    findTerm = findInput.value;
+    if (!findTerm) {
+      updateFindCount();
+      findInput.classList.remove('find-has-results', 'find-no-results');
+      return;
+    }
+
+    var term = findTerm.toLowerCase();
+    var spans = document.querySelectorAll('.page-text-layer span');
+
+    spans.forEach(function (span) {
+      if (!span.textContent) return;
+      if (span.textContent.toLowerCase().indexOf(term) !== -1) {
+        span.classList.add('find-match');
+        findMatches.push(span);
+      }
+    });
+
+    if (findMatches.length > 0) {
+      findInput.classList.add('find-has-results');
+      findInput.classList.remove('find-no-results');
+      findCurrentIdx = 0;
+      activateFindMatch(0);
+    } else {
+      findInput.classList.remove('find-has-results');
+      findInput.classList.add('find-no-results');
+    }
+
+    updateFindCount();
+  }
+
+  function clearFindHighlights() {
+    document.querySelectorAll('.page-text-layer span.find-match').forEach(function (el) {
+      el.classList.remove('find-match', 'find-match-active');
+    });
+  }
+
+  // Called after new pages render — re-apply highlights to newly rendered spans
+  function applyFindHighlights() {
+    if (!findTerm) return;
+    var term = findTerm.toLowerCase();
+    var spans = document.querySelectorAll('.page-text-layer span');
+    spans.forEach(function (span) {
+      if (!span.textContent) return;
+      if (span.textContent.toLowerCase().indexOf(term) !== -1) {
+        if (!span.classList.contains('find-match')) {
+          span.classList.add('find-match');
+          findMatches.push(span);
+        }
+      }
+    });
+    // Re-highlight active
+    if (findCurrentIdx >= 0 && findMatches[findCurrentIdx]) {
+      findMatches[findCurrentIdx].classList.add('find-match-active');
+    }
+    updateFindCount();
+  }
+
+  function activateFindMatch(idx) {
+    if (findCurrentIdx >= 0 && findMatches[findCurrentIdx]) {
+      findMatches[findCurrentIdx].classList.remove('find-match-active');
+    }
+    findCurrentIdx = idx;
+    if (findMatches[findCurrentIdx]) {
+      findMatches[findCurrentIdx].classList.add('find-match-active');
+      findMatches[findCurrentIdx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+    updateFindCount();
+  }
+
+  function findNext() {
+    if (!findMatches.length) { runFind(); return; }
+    activateFindMatch((findCurrentIdx + 1) % findMatches.length);
+  }
+
+  function findPrev() {
+    if (!findMatches.length) { runFind(); return; }
+    activateFindMatch((findCurrentIdx - 1 + findMatches.length) % findMatches.length);
+  }
+
+  function updateFindCount() {
+    if (!findTerm) {
+      findCount.textContent = '';
+      return;
+    }
+    if (findMatches.length === 0) {
+      findCount.textContent = 'No results';
+      return;
+    }
+    findCount.textContent = (findCurrentIdx + 1) + ' / ' + findMatches.length;
+  }
+
   // ---- Slide counter ----
   function updateSlideCounter() {
     var tab = getActiveTab();
     if (!tab) {
-      toolbarSlideCounter.textContent = 'Slide 0 of 0';
+      toolbarPageInput.value = 0;
+      toolbarPageTotal.textContent = 0;
       fsCounter.textContent = 'Slide 0 of 0';
       return;
     }
-    var text = 'Slide ' + tab.currentSlide + ' of ' + tab.totalSlides;
-    toolbarSlideCounter.textContent = text;
-    fsCounter.textContent = text;
+    toolbarPageInput.value = tab.currentSlide;
+    toolbarPageInput.max = tab.totalSlides;
+    toolbarPageTotal.textContent = tab.totalSlides;
+    fsCounter.textContent = 'Slide ' + tab.currentSlide + ' of ' + tab.totalSlides;
   }
 
   // ---- Tab cycling ----
@@ -906,6 +1069,45 @@
     toolbarPresent.addEventListener('click', toggleFullscreen);
     document.getElementById('toolbar-clear-cache').addEventListener('click', clearCache);
     document.getElementById('toolbar-doc-dark').addEventListener('click', toggleDocDark);
+    toolbarRotateLeft.addEventListener('click', rotateLeft);
+    toolbarRotateRight.addEventListener('click', rotateRight);
+
+    // Page input — jump to page on Enter
+    toolbarPageInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        var n = parseInt(toolbarPageInput.value);
+        if (!isNaN(n)) goToSlide(n);
+        toolbarPageInput.blur();
+      }
+    });
+    toolbarPageInput.addEventListener('blur', function () {
+      var tab = getActiveTab();
+      if (tab) toolbarPageInput.value = tab.currentSlide;
+    });
+
+    // Find bar
+    findInput.addEventListener('input', function () {
+      clearTimeout(findDebounceTimer);
+      findDebounceTimer = setTimeout(runFind, 250);
+    });
+    findInput.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        if (e.shiftKey) findPrev(); else findNext();
+      }
+      if (e.key === 'Escape') {
+        findInput.value = '';
+        clearFindHighlights();
+        findMatches = [];
+        findCurrentIdx = -1;
+        findTerm = '';
+        findCount.textContent = '';
+        findInput.classList.remove('find-has-results', 'find-no-results');
+        findInput.blur();
+      }
+    });
+    findPrevBtn.addEventListener('click', findPrev);
+    findNextBtn.addEventListener('click', findNext);
 
     welcomeOpenBtn.addEventListener('click', function () { window.api.openFileDialog(); });
 
@@ -967,9 +1169,17 @@
         toggleBars();
         return;
       }
+      if (e.ctrlKey && (e.key === 'f' || e.key === 'F')) {
+        e.preventDefault();
+        openFind();
+        return;
+      }
       // Let the browser handle Ctrl+<key> combos we don't explicitly handle
-      // (e.g. Ctrl+C for copy, Ctrl+A for select all)
       if (e.ctrlKey || e.metaKey) return;
+
+      // Don't handle shortcuts when find input or page input is focused
+      var focused = document.activeElement;
+      if (focused === findInput || focused === toolbarPageInput) return;
 
       // Document dark mode toggle — "i" key
       if (e.key === 'i' || e.key === 'I') {
