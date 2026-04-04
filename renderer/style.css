@@ -568,7 +568,6 @@ body {
   position: relative;
   flex-shrink: 0;
   line-height: 0;
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
   background: #fff;
 }
 
@@ -786,8 +785,11 @@ body.fullscreen #slide-canvas {
 
 /* Document dark mode — inverts PDF pages for comfortable reading */
 .page-wrapper.doc-dark {
+  background: #1e1e1e;
+}
+
+.page-wrapper.doc-dark .page-canvas {
   filter: invert(0.88) hue-rotate(180deg);
-  background: #1a1a1a;
   transition: filter 0.3s ease;
 }
 
