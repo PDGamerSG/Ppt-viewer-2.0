@@ -144,6 +144,13 @@ function buildMenu() {
           },
         },
         { type: 'separator' },
+        {
+          label: 'Document Dark Mode',
+          click: () => {
+            if (mainWindow) mainWindow.webContents.send('toggle-theme');
+          },
+        },
+        { type: 'separator' },
         { role: 'toggleDevTools' },
       ],
     },

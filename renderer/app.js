@@ -21,6 +21,9 @@
   var scrollStartY = 0;
   var didPan = false;
 
+  // Document dark mode state
+  var docDarkMode = localStorage.getItem('pptviewer-doc-dark') === 'true';
+
   // Global
   var isFullscreen = false;
   var fsCounterTimeout = null;
@@ -98,6 +101,61 @@
 
   function extractFileName(filePath) {
     return filePath.replace(/\\/g, '/').split('/').pop();
+  }
+
+  // ---- Document dark mode ----
+  var themeToastTimeout = null;
+
+  function applyDocDark() {
+    // Apply to all page wrappers (main view)
+    var wrappers = document.querySelectorAll('#slide-container .page-wrapper');
+    wrappers.forEach(function (w) {
+      if (docDarkMode) w.classList.add('doc-dark');
+      else w.classList.remove('doc-dark');
+    });
+
+    // Apply to all thumbnails
+    var thumbs = document.querySelectorAll('.thumbnail-item');
+    thumbs.forEach(function (t) {
+      if (docDarkMode) t.classList.add('doc-dark');
+      else t.classList.remove('doc-dark');
+    });
+
+    updateDocDarkButton();
+  }
+
+  function updateDocDarkButton() {
+    var btn = document.getElementById('toolbar-doc-dark');
+    var label = document.getElementById('doc-dark-label');
+    var icon = document.getElementById('doc-dark-icon');
+    if (!btn) return;
+
+    if (docDarkMode) {
+      btn.classList.add('doc-dark-active');
+      if (icon) icon.textContent = '\u2600'; // sun — click to go back to normal
+      if (label) label.textContent = 'Normal';
+    } else {
+      btn.classList.remove('doc-dark-active');
+      if (icon) icon.textContent = '\uD83C\uDF19'; // moon — click to darken
+      if (label) label.textContent = 'Dark Read';
+    }
+  }
+
+  function toggleDocDark() {
+    docDarkMode = !docDarkMode;
+    localStorage.setItem('pptviewer-doc-dark', docDarkMode ? 'true' : 'false');
+    applyDocDark();
+    showThemeToast(docDarkMode ? 'Document dark mode ON' : 'Document dark mode OFF');
+  }
+
+  function showThemeToast(message) {
+    var toast = document.getElementById('theme-toast');
+    toast.textContent = message;
+    toast.classList.add('show');
+    clearTimeout(themeToastTimeout);
+    themeToastTimeout = setTimeout(function () {
+      toast.classList.remove('show');
+    }, 1200);
   }
 
   // ---- Init ----
@@ -332,6 +390,7 @@
 
       thumbnailList.appendChild(item);
     }
+    applyDocDark();
   }
 
   function closeTab(tabId) {
@@ -503,6 +562,7 @@
     await renderVisiblePages();
     updateSlideCounter();
     updateThumbnailHighlight();
+    applyDocDark();
   }
 
   function updatePannable() {
@@ -656,6 +716,7 @@
 
       thumbnailList.appendChild(item);
     }
+    applyDocDark();
   }
 
   function updateThumbnailHighlight() {
@@ -844,6 +905,7 @@
     toolbarZoomReset.addEventListener('click', zoomReset);
     toolbarPresent.addEventListener('click', toggleFullscreen);
     document.getElementById('toolbar-clear-cache').addEventListener('click', clearCache);
+    document.getElementById('toolbar-doc-dark').addEventListener('click', toggleDocDark);
 
     welcomeOpenBtn.addEventListener('click', function () { window.api.openFileDialog(); });
 
@@ -908,6 +970,12 @@
       // Let the browser handle Ctrl+<key> combos we don't explicitly handle
       // (e.g. Ctrl+C for copy, Ctrl+A for select all)
       if (e.ctrlKey || e.metaKey) return;
+
+      // Document dark mode toggle — "i" key
+      if (e.key === 'i' || e.key === 'I') {
+        toggleDocDark();
+        return;
+      }
 
       var tab = getActiveTab();
       if (!tab || tab.totalSlides === 0) return;
@@ -1041,6 +1109,7 @@
     window.api.onZoomIn(function () { zoomIn(); });
     window.api.onZoomOut(function () { zoomOut(); });
     window.api.onZoomReset(function () { zoomReset(); });
+    window.api.onToggleTheme(function () { toggleDocDark(); });
   }
 
   function handleDrop(e) {

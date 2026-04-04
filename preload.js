@@ -22,4 +22,5 @@ contextBridge.exposeInMainWorld('api', {
   onZoomIn: (callback) => ipcRenderer.on('zoom-in', () => callback()),
   onZoomOut: (callback) => ipcRenderer.on('zoom-out', () => callback()),
   onZoomReset: (callback) => ipcRenderer.on('zoom-reset', () => callback()),
+  onToggleTheme: (callback) => ipcRenderer.on('toggle-theme', () => callback()),
 });

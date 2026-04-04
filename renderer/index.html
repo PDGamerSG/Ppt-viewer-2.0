@@ -95,6 +95,10 @@
       <button id="toolbar-clear-cache" class="toolbar-btn" title="Clear converted PDF cache">
         <span>🗑</span> Clear Cache
       </button>
+      <div class="toolbar-sep"></div>
+      <button id="toolbar-doc-dark" class="toolbar-btn" title="Invert document colors (I)">
+        <span id="doc-dark-icon">🌙</span> <span id="doc-dark-label">Dark Read</span>
+      </button>
       <div class="toolbar-spacer"></div>
       <button id="collapse-bars-btn" class="toolbar-btn" title="Hide toolbar (Ctrl+H)">▲</button>
     </div>
@@ -120,6 +124,9 @@
 
   <!-- Fullscreen Overlay Counter -->
   <div id="fs-counter" class="hidden">Slide 1 of 1</div>
+
+  <!-- Theme toggle toast -->
+  <div id="theme-toast"></div>
 
   <script src="../node_modules/pdfjs-dist/build/pdf.min.js"></script>
   <script src="../lib/pdfRenderer.js"></script>

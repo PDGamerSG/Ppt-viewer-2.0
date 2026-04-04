@@ -783,3 +783,54 @@ body.fullscreen #main-view {
 body.fullscreen #slide-canvas {
   box-shadow: none;
 }
+
+/* Document dark mode — inverts PDF pages for comfortable reading */
+.page-wrapper.doc-dark {
+  filter: invert(0.88) hue-rotate(180deg);
+  background: #1a1a1a;
+  transition: filter 0.3s ease;
+}
+
+.page-wrapper.doc-dark .page-text-layer ::selection {
+  background: rgba(200, 120, 50, 0.4);
+}
+
+/* Also invert thumbnails when doc-dark is active */
+.thumbnail-item.doc-dark canvas,
+.thumbnail-item.doc-dark img {
+  filter: invert(0.88) hue-rotate(180deg);
+}
+
+/* Toast notification */
+#theme-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  z-index: 3000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+#theme-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* Active state for doc-dark toolbar button */
+.toolbar-btn.doc-dark-active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.toolbar-btn.doc-dark-active:hover {
+  background: var(--accent-hover);
+}
