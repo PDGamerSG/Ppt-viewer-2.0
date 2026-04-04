@@ -729,7 +729,7 @@ body {
   cursor: grabbing;
 }
 
-/* Tab Bar */
+/* Tab Bar — also serves as the custom title bar / drag region */
 #tab-bar {
   display: flex;
   align-items: center;
@@ -737,12 +737,62 @@ body {
   background: var(--bg-tertiary);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
-  overflow-x: auto;
+  overflow-x: hidden;
   overflow-y: hidden;
+  -webkit-app-region: drag;
+  user-select: none;
 }
 
 #tab-bar::-webkit-scrollbar {
   height: 0;
+}
+
+/* Tabs, buttons — must opt out of drag so they're clickable */
+#tab-list,
+.tab-item,
+.tab-add-btn,
+#win-controls,
+#win-controls button {
+  -webkit-app-region: no-drag;
+}
+
+/* Spacer that absorbs remaining space (draggable) */
+.tab-bar-drag {
+  flex: 1;
+  height: 100%;
+  -webkit-app-region: drag;
+}
+
+/* Custom window control buttons */
+#win-controls {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  flex-shrink: 0;
+}
+
+#win-controls button {
+  width: 46px;
+  height: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+#win-controls button:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+#win-close:hover {
+  background: #c42b1c !important;
+  color: #fff !important;
 }
 
 #tab-list {
@@ -914,6 +964,70 @@ body.fullscreen #slide-canvas {
 .thumbnail-item.doc-dark canvas,
 .thumbnail-item.doc-dark img {
   filter: invert(0.88) hue-rotate(180deg);
+}
+
+/* Hamburger dropdown menu */
+#hamburger-menu {
+  position: fixed;
+  top: 70px; /* below tab bar + toolbar */
+  left: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 5000;
+  min-width: 220px;
+  padding: 4px 0;
+  -webkit-app-region: no-drag;
+}
+
+#hamburger-menu.hidden {
+  display: none;
+}
+
+.hmenu-section {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-secondary);
+  padding: 8px 14px 4px;
+}
+
+.hmenu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 7px 14px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.hmenu-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.hmenu-kbd {
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  padding: 1px 6px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  margin-left: 16px;
+}
+
+.hmenu-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
 }
 
 /* Toast notification */

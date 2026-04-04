@@ -23,4 +23,12 @@ contextBridge.exposeInMainWorld('api', {
   onZoomOut: (callback) => ipcRenderer.on('zoom-out', () => callback()),
   onZoomReset: (callback) => ipcRenderer.on('zoom-reset', () => callback()),
   onToggleTheme: (callback) => ipcRenderer.on('toggle-theme', () => callback()),
+
+  // Window controls
+  windowMinimize: () => ipcRenderer.invoke('window-minimize'),
+  windowMaximize: () => ipcRenderer.invoke('window-maximize'),
+  windowClose: () => ipcRenderer.invoke('window-close'),
+  windowIsMaximized: () => ipcRenderer.invoke('window-is-maximized'),
+  showAbout: () => ipcRenderer.invoke('show-about'),
+  toggleDevTools: () => ipcRenderer.invoke('toggle-devtools'),
 });

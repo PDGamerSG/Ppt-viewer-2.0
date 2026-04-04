@@ -63,15 +63,41 @@
 
   <!-- Main Viewer -->
   <div id="viewer" class="hidden">
-    <!-- Tab Bar -->
+    <!-- Tab Bar (also the drag region / title bar) -->
     <div id="tab-bar">
       <div id="tab-list"></div>
       <button id="tab-open-btn" class="tab-add-btn" title="Open new file (Ctrl+O)">+</button>
+      <div class="tab-bar-drag"></div>
+      <!-- Custom window controls -->
+      <div id="win-controls">
+        <button id="win-minimize" title="Minimize">&#x2212;</button>
+        <button id="win-maximize" title="Maximize / Restore">&#x25A1;</button>
+        <button id="win-close" title="Close">&#x2715;</button>
+      </div>
+    </div>
+
+    <!-- Hamburger dropdown menu -->
+    <div id="hamburger-menu" class="hidden">
+      <div class="hmenu-section">File</div>
+      <button class="hmenu-item" id="hmenu-open">📂 Open File <span class="hmenu-kbd">Ctrl+O</span></button>
+      <div class="hmenu-sep"></div>
+      <button class="hmenu-item" id="hmenu-exit">✕ Exit</button>
+      <div class="hmenu-section">View</div>
+      <button class="hmenu-item" id="hmenu-sidebar">☰ Toggle Sidebar <span class="hmenu-kbd">Ctrl+B</span></button>
+      <button class="hmenu-item" id="hmenu-bars">▲ Toggle Toolbar <span class="hmenu-kbd">Ctrl+H</span></button>
+      <button class="hmenu-item" id="hmenu-present">▶ Present <span class="hmenu-kbd">F5</span></button>
+      <button class="hmenu-item" id="hmenu-doc-dark">🌙 Document Dark Mode <span class="hmenu-kbd">I</span></button>
+      <div class="hmenu-sep"></div>
+      <button class="hmenu-item" id="hmenu-devtools">⚙ Developer Tools</button>
+      <div class="hmenu-section">Help</div>
+      <button class="hmenu-item" id="hmenu-about">ℹ About PPT Viewer</button>
+      <button class="hmenu-item" id="hmenu-cache">🗑 Clear Cache</button>
     </div>
 
     <!-- Toolbar -->
     <div id="toolbar">
-      <button id="toolbar-open" class="toolbar-btn" title="Open File (Ctrl+O)">📂</button>
+      <button id="toolbar-hamburger" class="toolbar-btn toolbar-icon-btn" title="Menu">&#9776;</button>
+      <button id="toolbar-open" class="toolbar-btn toolbar-icon-btn" title="Open File (Ctrl+O)">📂</button>
       <div class="toolbar-sep"></div>
       <button id="toolbar-toggle-sidebar" class="toolbar-btn" title="Toggle Sidebar (Ctrl+B)">☰</button>
       <div class="toolbar-sep"></div>
@@ -102,8 +128,6 @@
       <button id="toolbar-doc-dark" class="toolbar-btn" title="Document Dark Mode (I)">
         <span id="doc-dark-icon">🌙</span> <span id="doc-dark-label">Dark Read</span>
       </button>
-      <div class="toolbar-sep"></div>
-      <button id="toolbar-clear-cache" class="toolbar-btn toolbar-icon-btn" title="Clear converted PDF cache">🗑</button>
       <div class="toolbar-spacer"></div>
       <button id="collapse-bars-btn" class="toolbar-btn toolbar-icon-btn" title="Hide toolbar (Ctrl+H)">▲</button>
     </div>

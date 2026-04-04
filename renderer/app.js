@@ -995,10 +995,7 @@
   // ---- Clear cache ----
   async function clearCache() {
     await window.api.clearCache();
-    var btn = document.getElementById('toolbar-clear-cache');
-    var original = btn.innerHTML;
-    btn.innerHTML = '<span>\u2713</span> Cleared';
-    setTimeout(function () { btn.innerHTML = original; }, 1500);
+    showThemeToast('Cache cleared');
   }
 
   // ---- Sidebar toggle ----
@@ -1056,6 +1053,60 @@
 
   // ---- Event Listeners ----
   function setupEventListeners() {
+    // Window controls
+    document.getElementById('win-minimize').addEventListener('click', function () { window.api.windowMinimize(); });
+    document.getElementById('win-maximize').addEventListener('click', function () { window.api.windowMaximize(); });
+    document.getElementById('win-close').addEventListener('click', function () { window.api.windowClose(); });
+
+    // Hamburger menu toggle
+    var hamburgerMenu = document.getElementById('hamburger-menu');
+    document.getElementById('toolbar-hamburger').addEventListener('click', function (e) {
+      e.stopPropagation();
+      hamburgerMenu.classList.toggle('hidden');
+    });
+    // Close dropdown when clicking anywhere else
+    document.addEventListener('click', function () {
+      hamburgerMenu.classList.add('hidden');
+    });
+    hamburgerMenu.addEventListener('click', function (e) { e.stopPropagation(); });
+
+    // Hamburger menu items
+    document.getElementById('hmenu-open').addEventListener('click', function () {
+      hamburgerMenu.classList.add('hidden');
+      window.api.openFileDialog();
+    });
+    document.getElementById('hmenu-exit').addEventListener('click', function () {
+      window.api.windowClose();
+    });
+    document.getElementById('hmenu-sidebar').addEventListener('click', function () {
+      hamburgerMenu.classList.add('hidden');
+      toggleSidebar();
+    });
+    document.getElementById('hmenu-bars').addEventListener('click', function () {
+      hamburgerMenu.classList.add('hidden');
+      toggleBars();
+    });
+    document.getElementById('hmenu-present').addEventListener('click', function () {
+      hamburgerMenu.classList.add('hidden');
+      toggleFullscreen();
+    });
+    document.getElementById('hmenu-doc-dark').addEventListener('click', function () {
+      hamburgerMenu.classList.add('hidden');
+      toggleDocDark();
+    });
+    document.getElementById('hmenu-devtools').addEventListener('click', function () {
+      hamburgerMenu.classList.add('hidden');
+      window.api.toggleDevTools();
+    });
+    document.getElementById('hmenu-about').addEventListener('click', function () {
+      hamburgerMenu.classList.add('hidden');
+      window.api.showAbout();
+    });
+    document.getElementById('hmenu-cache').addEventListener('click', function () {
+      hamburgerMenu.classList.add('hidden');
+      clearCache();
+    });
+
     toolbarOpen.addEventListener('click', function () { window.api.openFileDialog(); });
     tabOpenBtn.addEventListener('click', function () { window.api.openFileDialog(); });
     toolbarToggleSidebar.addEventListener('click', toggleSidebar);
@@ -1067,7 +1118,6 @@
     toolbarZoomOut.addEventListener('click', zoomOut);
     toolbarZoomReset.addEventListener('click', zoomReset);
     toolbarPresent.addEventListener('click', toggleFullscreen);
-    document.getElementById('toolbar-clear-cache').addEventListener('click', clearCache);
     document.getElementById('toolbar-doc-dark').addEventListener('click', toggleDocDark);
     toolbarRotateLeft.addEventListener('click', rotateLeft);
     toolbarRotateRight.addEventListener('click', rotateRight);

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell, nativeTheme } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { detectLibreOffice, convertToPdf, cleanupCache } = require('./lib/converter');
@@ -62,6 +62,7 @@ function createWindow() {
     icon: path.join(__dirname, 'assets', 'icon.ico'),
     backgroundColor: '#1e1e1e',
     show: false,
+    frame: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -90,91 +91,31 @@ function createWindow() {
     mainWindow = null;
   });
 
-  buildMenu();
+  Menu.setApplicationMenu(null);
 }
 
-function buildMenu() {
-  const template = [
-    {
-      label: 'File',
-      submenu: [
-        {
-          label: 'Open...',
-          accelerator: 'CmdOrCtrl+O',
-          click: () => openFileDialog(),
-        },
-        { type: 'separator' },
-        {
-          label: 'Exit',
-          accelerator: 'Alt+F4',
-          click: () => app.quit(),
-        },
-      ],
-    },
-    {
-      label: 'View',
-      submenu: [
-        {
-          label: 'Present (Fullscreen)',
-          accelerator: 'F5',
-          click: () => {
-            if (mainWindow) mainWindow.webContents.send('toggle-fullscreen');
-          },
-        },
-        { type: 'separator' },
-        {
-          label: 'Zoom In',
-          accelerator: 'CmdOrCtrl+=',
-          click: () => {
-            if (mainWindow) mainWindow.webContents.send('zoom-in');
-          },
-        },
-        {
-          label: 'Zoom Out',
-          accelerator: 'CmdOrCtrl+-',
-          click: () => {
-            if (mainWindow) mainWindow.webContents.send('zoom-out');
-          },
-        },
-        {
-          label: 'Reset Zoom',
-          accelerator: 'CmdOrCtrl+0',
-          click: () => {
-            if (mainWindow) mainWindow.webContents.send('zoom-reset');
-          },
-        },
-        { type: 'separator' },
-        {
-          label: 'Document Dark Mode',
-          click: () => {
-            if (mainWindow) mainWindow.webContents.send('toggle-theme');
-          },
-        },
-        { type: 'separator' },
-        { role: 'toggleDevTools' },
-      ],
-    },
-    {
-      label: 'Help',
-      submenu: [
-        {
-          label: 'About PPT Viewer',
-          click: () => {
-            dialog.showMessageBox(mainWindow, {
-              type: 'info',
-              title: 'About PPT Viewer',
-              message: 'PPT Viewer v1.0.0',
-              detail: 'A fast, native PowerPoint viewer for Windows.\nPowered by LibreOffice and PDF.js.',
-            });
-          },
-        },
-      ],
-    },
-  ];
+// Window control IPC handlers
+ipcMain.handle('window-minimize', () => { if (mainWindow) mainWindow.minimize(); });
+ipcMain.handle('window-maximize', () => {
+  if (!mainWindow) return;
+  if (mainWindow.isMaximized()) mainWindow.unmaximize();
+  else mainWindow.maximize();
+});
+ipcMain.handle('window-close', () => { if (mainWindow) mainWindow.close(); });
+ipcMain.handle('window-is-maximized', () => mainWindow ? mainWindow.isMaximized() : false);
 
-  const menu = Menu.buildFromTemplate(template);
-  Menu.setApplicationMenu(menu);
-}
+ipcMain.handle('toggle-devtools', () => {
+  if (mainWindow) mainWindow.webContents.toggleDevTools();
+});
+
+ipcMain.handle('show-about', () => {
+  dialog.showMessageBox(mainWindow, {
+    type: 'info',
+    title: 'About PPT Viewer',
+    message: 'PPT Viewer v1.0.0',
+    detail: 'A fast, native PowerPoint viewer for Windows.\nPowered by LibreOffice and PDF.js.',
+  });
+});
 
 async function openFileDialog() {
   const result = await dialog.showOpenDialog(mainWindow, {
