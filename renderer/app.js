@@ -133,6 +133,9 @@
     updateDocDarkButton();
   }
 
+  var svgMoon = '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M13.5 10.5A5.5 5.5 0 0 1 5.5 2.5a5.5 5.5 0 1 0 8 8z"/></svg>';
+  var svgSun = '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="8" cy="8" r="3"/><line x1="8" y1="1.5" x2="8" y2="3"/><line x1="8" y1="13" x2="8" y2="14.5"/><line x1="1.5" y1="8" x2="3" y2="8"/><line x1="13" y1="8" x2="14.5" y2="8"/><line x1="3.5" y1="3.5" x2="4.5" y2="4.5"/><line x1="11.5" y1="11.5" x2="12.5" y2="12.5"/><line x1="12.5" y1="3.5" x2="11.5" y2="4.5"/><line x1="4.5" y1="11.5" x2="3.5" y2="12.5"/></svg>';
+
   function updateDocDarkButton() {
     var btn = document.getElementById('toolbar-doc-dark');
     var label = document.getElementById('doc-dark-label');
@@ -141,11 +144,11 @@
 
     if (docDarkMode) {
       btn.classList.add('doc-dark-active');
-      if (icon) icon.textContent = '\u2600'; // sun — click to go back to normal
+      if (icon) icon.innerHTML = svgSun;
       if (label) label.textContent = 'Normal';
     } else {
       btn.classList.remove('doc-dark-active');
-      if (icon) icon.textContent = '\uD83C\uDF19'; // moon — click to darken
+      if (icon) icon.innerHTML = svgMoon;
       if (label) label.textContent = 'Dark Read';
     }
   }
@@ -331,6 +334,20 @@
   function switchTab(tabId) {
     if (activeTabId === tabId) return;
 
+    // Save outgoing tab's DOM snapshot
+    var outgoing = getActiveTab();
+    if (outgoing && !outgoing.loading) {
+      var slideContainer = document.getElementById('slide-container');
+      var mainView = document.getElementById('main-view');
+      // Move the live DOM nodes into a DocumentFragment (cheap, no cloning)
+      var frag = document.createDocumentFragment();
+      while (slideContainer.firstChild) {
+        frag.appendChild(slideContainer.firstChild);
+      }
+      outgoing.domSnapshot = frag;
+      outgoing.snapshotScrollTop = mainView.scrollTop;
+    }
+
     activeTabId = tabId;
     var tab = getActiveTab();
     if (!tab) return;
@@ -341,7 +358,8 @@
     if (tab.loading) {
       thumbnailList.innerHTML = '';
       document.getElementById('slide-container').innerHTML = '';
-      toolbarSlideCounter.textContent = 'Loading...';
+      toolbarPageInput.value = '';
+      toolbarPageTotal.textContent = '…';
       window.api.setTitle(tab.fileName + ' (loading) \u2014 PPT Viewer');
       return;
     }
@@ -358,8 +376,12 @@
     findCount.textContent = '';
     findInput.classList.remove('find-has-results', 'find-no-results');
 
-    PdfRenderer.cleanup();
-    await PdfRenderer.loadDocument(tab.pdfData);
+    // Activate the document (no re-parsing needed if already loaded)
+    if (PdfRenderer.isLoaded(tab.id)) {
+      PdfRenderer.setActive(tab.id);
+    } else {
+      await PdfRenderer.loadDocument(tab.pdfData, tab.id);
+    }
 
     if (tab.thumbnailDataUrls && tab.thumbnailDataUrls.length === tab.totalSlides) {
       restoreThumbnailsFromCache(tab);
@@ -371,15 +393,38 @@
     updateZoomDisplay();
     updateRotateButtons();
     window.api.setTitle(tab.fileName + ' \u2014 PPT Viewer');
+
+    // If we have a DOM snapshot, restore it instantly (no re-render)
+    var slideContainer = document.getElementById('slide-container');
+    var mainView = document.getElementById('main-view');
+    if (tab.domSnapshot) {
+      slideContainer.innerHTML = '';
+      slideContainer.appendChild(tab.domSnapshot);
+      tab.domSnapshot = null;
+
+      // Restore page base dims from the first wrapper
+      pageBaseDims = await PdfRenderer.getPageDimensions(1, tab.pageRotation);
+      renderedPages.clear();
+      // Mark all pages that have canvas content as rendered
+      var wrappers = slideContainer.querySelectorAll('.page-wrapper');
+      for (var w = 0; w < wrappers.length; w++) {
+        var c = wrappers[w].querySelector('.page-canvas');
+        if (c && c.width > 0) renderedPages.add(parseInt(wrappers[w].dataset.page));
+      }
+      renderGeneration++;
+      updatePannable();
+      mainView.scrollTop = tab.snapshotScrollTop;
+      applyDocDark();
+      return;
+    }
+
     await setupContinuousView(tab);
 
     // Scroll to the page the user was on
-    setTimeout(function () {
-      var wrappers = document.querySelectorAll('#slide-container .page-wrapper');
-      if (wrappers[tab.currentSlide - 1]) {
-        wrappers[tab.currentSlide - 1].scrollIntoView({ block: 'start' });
-      }
-    }, 0);
+    var wrappers2 = document.querySelectorAll('#slide-container .page-wrapper');
+    if (wrappers2[tab.currentSlide - 1]) {
+      wrappers2[tab.currentSlide - 1].scrollIntoView({ block: 'start' });
+    }
   }
 
   function restoreThumbnailsFromCache(tab) {
@@ -415,6 +460,10 @@
     var idx = getTabIndex(tabId);
     if (idx === -1) return;
 
+    // Clean up only this tab's document
+    PdfRenderer.cleanupDoc(tabId);
+    tabs[idx].domSnapshot = null;
+    tabs[idx].canvasCache = {};
     tabs.splice(idx, 1);
 
     if (tabs.length === 0) {
@@ -470,6 +519,11 @@
       pageRotation: 0,
       thumbnailDataUrls: [],
       loading: true,
+      // Canvas cache: pageNum -> { canvas, zoom, rotation }
+      canvasCache: {},
+      // Snapshot of the slide container DOM for instant restore
+      domSnapshot: null,
+      snapshotScrollTop: 0,
     };
 
     tabs.push(tab);
@@ -494,8 +548,7 @@
       tab.loading = false;
 
       // Load the document to get page count
-      PdfRenderer.cleanup();
-      var numPages = await PdfRenderer.loadDocument(data);
+      var numPages = await PdfRenderer.loadDocument(data, tab.id);
       tab.totalSlides = numPages;
 
       await window.api.saveRecentFile(filePath, fileName);
@@ -541,12 +594,14 @@
 
   async function setupContinuousView(tab) {
     var slideContainer = document.getElementById('slide-container');
-    slideContainer.innerHTML = '';
     renderedPages.clear();
     renderGeneration++;
     pageBaseDims = null;
 
-    if (tab.totalSlides === 0) return;
+    if (tab.totalSlides === 0) {
+      slideContainer.innerHTML = '';
+      return;
+    }
 
     // Get base dimensions from first page (all PPT slides share dimensions)
     pageBaseDims = await PdfRenderer.getPageDimensions(1, tab.pageRotation);
@@ -559,6 +614,8 @@
     var cssWidth = pageBaseDims.width * effectiveZoom;
     var cssHeight = pageBaseDims.height * effectiveZoom;
 
+    // Build all wrappers off-screen in a fragment, then swap in one shot
+    var frag = document.createDocumentFragment();
     for (var i = 1; i <= tab.totalSlides; i++) {
       var wrapper = document.createElement('div');
       wrapper.className = 'page-wrapper';
@@ -574,8 +631,10 @@
       textLayerDiv.className = 'page-text-layer';
       wrapper.appendChild(textLayerDiv);
 
-      slideContainer.appendChild(wrapper);
+      frag.appendChild(wrapper);
     }
+    slideContainer.innerHTML = '';
+    slideContainer.appendChild(frag);
 
     updatePannable();
     await renderVisiblePages();
@@ -684,6 +743,9 @@
     var tab = getActiveTab();
     if (!tab || tab.totalSlides === 0) return;
 
+    // Invalidate DOM snapshot since layout changed
+    tab.domSnapshot = null;
+
     // Re-fetch dimensions in case rotation changed
     pageBaseDims = await PdfRenderer.getPageDimensions(1, tab.pageRotation);
     if (!pageBaseDims) return;
@@ -760,7 +822,7 @@
 
     var active = thumbnailList.querySelector('.thumbnail-item.active');
     if (active) {
-      active.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      active.scrollIntoView({ block: 'nearest' });
     }
   }
 
@@ -772,7 +834,7 @@
 
     var wrappers = document.querySelectorAll('#slide-container .page-wrapper');
     if (wrappers[num - 1]) {
-      wrappers[num - 1].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      wrappers[num - 1].scrollIntoView({ block: 'center' });
     }
 
     updateSlideCounter();
@@ -929,7 +991,7 @@
     findCurrentIdx = idx;
     if (findMatches[findCurrentIdx]) {
       findMatches[findCurrentIdx].classList.add('find-match-active');
-      findMatches[findCurrentIdx].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      findMatches[findCurrentIdx].scrollIntoView({ block: 'center' });
     }
     updateFindCount();
   }
@@ -1007,7 +1069,7 @@
     } else {
       sidebar.classList.add('sidebar-hidden');
     }
-    setTimeout(function () { refreshView(); }, 50);
+    requestAnimationFrame(function () { refreshView(); });
   }
 
   // ---- Collapse tab bar + toolbar ----
@@ -1018,7 +1080,7 @@
     } else {
       viewer.classList.remove('bars-collapsed');
     }
-    setTimeout(function () { refreshView(); }, 50);
+    requestAnimationFrame(function () { refreshView(); });
   }
 
   // ---- Fullscreen ----
@@ -1037,7 +1099,7 @@
       fsCounter.classList.add('hidden');
     }
 
-    setTimeout(function () { refreshView(); }, 100);
+    requestAnimationFrame(function () { refreshView(); });
   }
 
   function showFsCounter() {
@@ -1138,7 +1200,7 @@
     // Find bar
     findInput.addEventListener('input', function () {
       clearTimeout(findDebounceTimer);
-      findDebounceTimer = setTimeout(runFind, 250);
+      findDebounceTimer = setTimeout(runFind, 100);
     });
     findInput.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') {
@@ -1318,7 +1380,7 @@
       scrollTimer = setTimeout(function () {
         updateCurrentPageFromScroll();
         renderVisiblePages();
-      }, 50);
+      }, 16);
     });
 
     mainViewEl.addEventListener('wheel', function (e) {
@@ -1335,7 +1397,7 @@
       resizeTimeout = setTimeout(function () {
         var tab = getActiveTab();
         if (tab && tab.totalSlides > 0) refreshView();
-      }, 150);
+      }, 50);
     });
 
     document.body.addEventListener('dragover', function (e) {
