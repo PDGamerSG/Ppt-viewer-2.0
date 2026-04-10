@@ -24,6 +24,9 @@
   // Document dark mode state
   var docDarkMode = localStorage.getItem('pptviewer-doc-dark') === 'true';
 
+  // Auto fit page state
+  var autoFitPage = localStorage.getItem('pptviewer-auto-fit') === 'true';
+
   // Global
   var isFullscreen = false;
   var fsCounterTimeout = null;
@@ -38,6 +41,11 @@
   var pageBaseDims = null;
   var scrollTimer = null;
   var renderGeneration = 0;
+
+  // Navigation lock — when true, the scroll handler will NOT update
+  // tab.currentSlide.  goToSlide sets the authoritative value and the
+  // lock stays active until the user manually scrolls (wheel / trackpad).
+  var navLock = false;
 
   // DOM Elements
   var loadingOverlay = document.getElementById('loading-overlay');
@@ -153,6 +161,35 @@
     }
   }
 
+  // ---- Auto fit page ----
+  function getFitScale() {
+    var mainView = document.getElementById('main-view');
+    var availW = mainView.clientWidth - 40;
+    if (!pageBaseDims) return 1;
+    if (!autoFitPage) return availW / pageBaseDims.width;
+    var availH = mainView.clientHeight - 20;
+    return Math.min(availW / pageBaseDims.width, availH / pageBaseDims.height);
+  }
+
+  function updateAutoFitButton() {
+    var btn = document.getElementById('toolbar-auto-fit');
+    var menuItem = document.getElementById('hmenu-auto-fit');
+    if (btn) {
+      if (autoFitPage) btn.classList.add('auto-fit-active');
+      else btn.classList.remove('auto-fit-active');
+    }
+    if (menuItem) {
+      menuItem.querySelector('.hmenu-check').textContent = autoFitPage ? '✓' : '';
+    }
+  }
+
+  function toggleAutoFit() {
+    autoFitPage = !autoFitPage;
+    localStorage.setItem('pptviewer-auto-fit', autoFitPage ? 'true' : 'false');
+    updateAutoFitButton();
+    refreshView();
+  }
+
   function toggleDocDark() {
     docDarkMode = !docDarkMode;
     localStorage.setItem('pptviewer-doc-dark', docDarkMode ? 'true' : 'false');
@@ -183,13 +220,23 @@
 
     loadRecentFiles();
     setupEventListeners();
+    updateAutoFitButton();
   }
+
+  var universalTitlebar = document.getElementById('universal-titlebar');
 
   function showScreen(screen) {
     loScreen.classList.add('hidden');
     welcomeScreen.classList.add('hidden');
     viewer.classList.add('hidden');
     screen.classList.remove('hidden');
+
+    // Show universal title bar on welcome/LO screens, hide on viewer (it has its own tab bar)
+    if (screen === viewer) {
+      universalTitlebar.classList.add('hidden');
+    } else {
+      universalTitlebar.classList.remove('hidden');
+    }
   }
 
   function showLibreOfficeScreen() { showScreen(loScreen); }
@@ -383,29 +430,22 @@
       await PdfRenderer.loadDocument(tab.pdfData, tab.id);
     }
 
-    if (tab.thumbnailDataUrls && tab.thumbnailDataUrls.length === tab.totalSlides) {
-      restoreThumbnailsFromCache(tab);
-    } else {
-      await renderAllThumbnails(tab);
-    }
-
     updateSlideCounter();
     updateZoomDisplay();
     updateRotateButtons();
     window.api.setTitle(tab.fileName + ' \u2014 PPT Viewer');
 
-    // If we have a DOM snapshot, restore it instantly (no re-render)
+    // Restore main view FIRST so the user sees slides immediately
     var slideContainer = document.getElementById('slide-container');
     var mainView = document.getElementById('main-view');
+
     if (tab.domSnapshot) {
       slideContainer.innerHTML = '';
       slideContainer.appendChild(tab.domSnapshot);
       tab.domSnapshot = null;
 
-      // Restore page base dims from the first wrapper
       pageBaseDims = await PdfRenderer.getPageDimensions(1, tab.pageRotation);
       renderedPages.clear();
-      // Mark all pages that have canvas content as rendered
       var wrappers = slideContainer.querySelectorAll('.page-wrapper');
       for (var w = 0; w < wrappers.length; w++) {
         var c = wrappers[w].querySelector('.page-canvas');
@@ -415,19 +455,33 @@
       updatePannable();
       mainView.scrollTop = tab.snapshotScrollTop;
       applyDocDark();
-      return;
+      renderVisiblePages();
+    } else {
+      await setupContinuousView(tab);
+
+      // Scroll to the page the user was on
+      var wrappers2 = document.querySelectorAll('#slide-container .page-wrapper');
+      if (wrappers2[tab.currentSlide - 1]) {
+        wrappers2[tab.currentSlide - 1].scrollIntoView({ block: 'start' });
+      }
     }
 
-    await setupContinuousView(tab);
-
-    // Scroll to the page the user was on
-    var wrappers2 = document.querySelectorAll('#slide-container .page-wrapper');
-    if (wrappers2[tab.currentSlide - 1]) {
-      wrappers2[tab.currentSlide - 1].scrollIntoView({ block: 'start' });
+    // Thumbnails AFTER main view — don't block the slide display
+    if (tab.thumbnailDataUrls && tab.thumbnailDataUrls.length === tab.totalSlides) {
+      restoreThumbnailsFromCache(tab);
+    } else {
+      renderAllThumbnails(tab);
     }
   }
 
   function restoreThumbnailsFromCache(tab) {
+    // Verify we actually have valid cached thumbnails, not just empty placeholders
+    var hasValid = tab.thumbnailDataUrls.some(function (url) { return url && url.length > 0; });
+    if (!hasValid) {
+      renderAllThumbnails(tab);
+      return;
+    }
+
     thumbnailList.innerHTML = '';
     for (var i = 0; i < tab.thumbnailDataUrls.length; i++) {
       var pageNum = i + 1;
@@ -435,12 +489,15 @@
       item.className = 'thumbnail-item' + (pageNum === tab.currentSlide ? ' active' : '');
       item.dataset.page = pageNum;
 
-      var img = document.createElement('img');
-      img.src = tab.thumbnailDataUrls[i];
-      img.style.width = '100%';
-      img.style.height = 'auto';
-      img.style.display = 'block';
-      item.appendChild(img);
+      // Only create img if we have a valid data URL
+      if (tab.thumbnailDataUrls[i]) {
+        var img = document.createElement('img');
+        img.src = tab.thumbnailDataUrls[i];
+        img.style.width = '100%';
+        img.style.height = 'auto';
+        img.style.display = 'block';
+        item.appendChild(img);
+      }
 
       var num = document.createElement('span');
       num.className = 'thumbnail-number';
@@ -551,7 +608,8 @@
       var numPages = await PdfRenderer.loadDocument(data, tab.id);
       tab.totalSlides = numPages;
 
-      await window.api.saveRecentFile(filePath, fileName);
+      // Save recent file in background — don't block rendering
+      window.api.saveRecentFile(filePath, fileName);
 
       // If this tab is active (or was the first), render it
       if (activeTabId === tab.id || isFirstTab) {
@@ -561,6 +619,7 @@
         updateZoomDisplay();
         window.api.setTitle(fileName + ' \u2014 PPT Viewer');
         await setupContinuousView(tab);
+        // Thumbnails render in background — don't block slide display
         renderAllThumbnails(tab);
       } else {
         // Background tab finished loading — just update the tab indicator
@@ -608,8 +667,7 @@
     if (!pageBaseDims) return;
 
     var mainView = document.getElementById('main-view');
-    var maxWidth = mainView.clientWidth - 40;
-    var fitScale = maxWidth / pageBaseDims.width;
+    var fitScale = getFitScale();
     var effectiveZoom = fitScale * tab.zoomLevel;
     var cssWidth = pageBaseDims.width * effectiveZoom;
     var cssHeight = pageBaseDims.height * effectiveZoom;
@@ -666,32 +724,50 @@
     var viewBottom = viewTop + mainView.clientHeight;
     var buffer = mainView.clientHeight; // 1 screen buffer above and below
 
-    var maxWidth = mainView.clientWidth - 40;
-    var fitScale = maxWidth / pageBaseDims.width;
+    var fitScale = getFitScale();
     var effectiveZoom = fitScale * tab.zoomLevel;
 
+    // Collect pages that need rendering
+    var toRender = [];
     for (var i = 0; i < wrappers.length; i++) {
-      if (gen !== renderGeneration) return; // zoom/tab changed, abort stale render
-
       var wrapper = wrappers[i];
       var wTop = wrapper.offsetTop;
       var wBottom = wTop + wrapper.offsetHeight;
       var pageNum = parseInt(wrapper.dataset.page);
 
-      // Check if page is in visible range (with buffer)
       if (wBottom >= viewTop - buffer && wTop <= viewBottom + buffer) {
         if (!renderedPages.has(pageNum)) {
           renderedPages.add(pageNum);
+          toRender.push({ wrapper: wrapper, pageNum: pageNum });
+        }
+      }
+    }
 
+    // Render pages in parallel batches of 3
+    var BATCH = 3;
+    for (var s = 0; s < toRender.length; s += BATCH) {
+      if (gen !== renderGeneration) return;
+      var batch = toRender.slice(s, s + BATCH);
+      await Promise.all(batch.map(function (item) {
+        return (async function () {
           try {
-            var canvas = wrapper.querySelector('.page-canvas');
-            var textLayerEl = wrapper.querySelector('.page-text-layer');
+            var canvas = item.wrapper.querySelector('.page-canvas');
+            var textLayerEl = item.wrapper.querySelector('.page-text-layer');
 
-            // Render to offscreen canvas, then blit — prevents flash
             var offscreen = document.createElement('canvas');
-            await PdfRenderer.renderSlide(offscreen, pageNum, effectiveZoom, tab.pageRotation);
+            await PdfRenderer.renderSlide(offscreen, item.pageNum, effectiveZoom, tab.pageRotation);
 
-            if (gen !== renderGeneration) return; // stale, discard
+            // Generation changed — discard this render and allow retry
+            if (gen !== renderGeneration) {
+              renderedPages.delete(item.pageNum);
+              return;
+            }
+
+            // Guard: if offscreen has no content, don't blit a black rect
+            if (offscreen.width === 0 || offscreen.height === 0) {
+              renderedPages.delete(item.pageNum);
+              return;
+            }
 
             canvas.width = offscreen.width;
             canvas.height = offscreen.height;
@@ -700,18 +776,21 @@
             var ctx = canvas.getContext('2d');
             ctx.drawImage(offscreen, 0, 0);
 
-            await PdfRenderer.renderTextLayer(textLayerEl, pageNum, effectiveZoom, tab.pageRotation);
+            await PdfRenderer.renderTextLayer(textLayerEl, item.pageNum, effectiveZoom, tab.pageRotation);
             if (docDarkMode) applyDocDark();
             applyFindHighlights();
           } catch (err) {
-            renderedPages.delete(pageNum); // allow retry on next scroll
+            renderedPages.delete(item.pageNum);
           }
-        }
-      }
+        })();
+      }));
     }
   }
 
   function updateCurrentPageFromScroll() {
+    // Skip if an explicit goToSlide is still animating — its target is authoritative
+    if (navLock) return;
+
     var tab = getActiveTab();
     if (!tab || tab.totalSlides === 0) return;
 
@@ -746,6 +825,11 @@
     // Invalidate DOM snapshot since layout changed
     tab.domSnapshot = null;
 
+    // Text layers will be rebuilt — old find match refs are now stale
+    findMatches = [];
+    findCurrentIdx = -1;
+    updateFindCount();
+
     // Re-fetch dimensions in case rotation changed
     pageBaseDims = await PdfRenderer.getPageDimensions(1, tab.pageRotation);
     if (!pageBaseDims) return;
@@ -754,8 +838,7 @@
     renderGeneration++;
 
     var mainView = document.getElementById('main-view');
-    var maxWidth = mainView.clientWidth - 40;
-    var fitScale = maxWidth / pageBaseDims.width;
+    var fitScale = getFitScale();
     var effectiveZoom = fitScale * tab.zoomLevel;
     var cssWidth = pageBaseDims.width * effectiveZoom;
     var cssHeight = pageBaseDims.height * effectiveZoom;
@@ -777,20 +860,15 @@
 
   async function renderAllThumbnails(tab) {
     thumbnailList.innerHTML = '';
-    tab.thumbnailDataUrls = [];
+    tab.thumbnailDataUrls = new Array(tab.totalSlides).fill('');
 
+    // Create all placeholder items first for instant layout
+    var items = [];
+    var frag = document.createDocumentFragment();
     for (var i = 1; i <= tab.totalSlides; i++) {
       var item = document.createElement('div');
       item.className = 'thumbnail-item' + (i === tab.currentSlide ? ' active' : '');
       item.dataset.page = i;
-
-      var canvas = await PdfRenderer.renderThumbnail(i, 160, tab.pageRotation);
-      if (canvas) {
-        tab.thumbnailDataUrls.push(canvas.toDataURL('image/png'));
-        item.appendChild(canvas);
-      } else {
-        tab.thumbnailDataUrls.push('');
-      }
 
       var num = document.createElement('span');
       num.className = 'thumbnail-number';
@@ -801,7 +879,31 @@
         item.addEventListener('click', function () { goToSlide(pageNum); });
       })(i);
 
-      thumbnailList.appendChild(item);
+      items.push(item);
+      frag.appendChild(item);
+    }
+    thumbnailList.appendChild(frag);
+
+    // Render thumbnails in parallel batches of 4 for speed
+    var BATCH_SIZE = 4;
+    for (var start = 0; start < tab.totalSlides; start += BATCH_SIZE) {
+      var end = Math.min(start + BATCH_SIZE, tab.totalSlides);
+      var promises = [];
+      for (var j = start; j < end; j++) {
+        (function (idx) {
+          promises.push(
+            PdfRenderer.renderThumbnail(idx + 1, 140, tab.pageRotation).then(function (canvas) {
+              if (canvas) {
+                tab.thumbnailDataUrls[idx] = canvas.toDataURL('image/jpeg', 0.7);
+                items[idx].insertBefore(canvas, items[idx].firstChild);
+              }
+            }).catch(function () {})
+          );
+        })(j);
+      }
+      await Promise.all(promises);
+      // Bail out if tab was closed or switched during rendering
+      if (getTabIndex(tab.id) === -1 || activeTabId !== tab.id) return;
     }
     applyDocDark();
   }
@@ -832,9 +934,14 @@
     if (!tab || num < 1 || num > tab.totalSlides) return;
     tab.currentSlide = num;
 
+    // Lock: the scroll handler must NOT touch currentSlide until the user
+    // manually scrolls (wheel/trackpad).  This prevents scrollIntoView's
+    // intermediate scroll positions from corrupting the page counter.
+    navLock = true;
+
     var wrappers = document.querySelectorAll('#slide-container .page-wrapper');
     if (wrappers[num - 1]) {
-      wrappers[num - 1].scrollIntoView({ block: 'center' });
+      wrappers[num - 1].scrollIntoView({ block: 'start' });
     }
 
     updateSlideCounter();
@@ -859,6 +966,11 @@
   function setZoom(level) {
     var tab = getActiveTab();
     if (!tab) return;
+    if (autoFitPage) {
+      autoFitPage = false;
+      localStorage.setItem('pptviewer-auto-fit', 'false');
+      updateAutoFitButton();
+    }
     tab.zoomLevel = Math.max(0.25, Math.min(4, level));
     updateZoomDisplay();
     refreshView();
@@ -1115,10 +1227,15 @@
 
   // ---- Event Listeners ----
   function setupEventListeners() {
-    // Window controls
+    // Window controls (viewer tab bar)
     document.getElementById('win-minimize').addEventListener('click', function () { window.api.windowMinimize(); });
     document.getElementById('win-maximize').addEventListener('click', function () { window.api.windowMaximize(); });
     document.getElementById('win-close').addEventListener('click', function () { window.api.windowClose(); });
+
+    // Universal title bar window controls (welcome/LO screens)
+    document.getElementById('utb-minimize').addEventListener('click', function () { window.api.windowMinimize(); });
+    document.getElementById('utb-maximize').addEventListener('click', function () { window.api.windowMaximize(); });
+    document.getElementById('utb-close').addEventListener('click', function () { window.api.windowClose(); });
 
     // Hamburger menu toggle
     var hamburgerMenu = document.getElementById('hamburger-menu');
@@ -1181,6 +1298,11 @@
     toolbarZoomReset.addEventListener('click', zoomReset);
     toolbarPresent.addEventListener('click', toggleFullscreen);
     document.getElementById('toolbar-doc-dark').addEventListener('click', toggleDocDark);
+    document.getElementById('toolbar-auto-fit').addEventListener('click', toggleAutoFit);
+    document.getElementById('hmenu-auto-fit').addEventListener('click', function () {
+      hamburgerMenu.classList.add('hidden');
+      toggleAutoFit();
+    });
     toolbarRotateLeft.addEventListener('click', rotateLeft);
     toolbarRotateRight.addEventListener('click', rotateRight);
 
@@ -1266,6 +1388,11 @@
         else nextTab();
         return;
       }
+      if (e.ctrlKey && (e.key === 'o' || e.key === 'O')) {
+        e.preventDefault();
+        window.api.openFileDialog();
+        return;
+      }
       if (e.ctrlKey && (e.key === 'w' || e.key === 'W')) {
         e.preventDefault();
         closeActiveTab();
@@ -1286,6 +1413,21 @@
         openFind();
         return;
       }
+      if (e.ctrlKey && (e.key === '=' || e.key === '+')) {
+        e.preventDefault();
+        zoomIn();
+        return;
+      }
+      if (e.ctrlKey && e.key === '-') {
+        e.preventDefault();
+        zoomOut();
+        return;
+      }
+      if (e.ctrlKey && e.key === '0') {
+        e.preventDefault();
+        zoomReset();
+        return;
+      }
       // Let the browser handle Ctrl+<key> combos we don't explicitly handle
       if (e.ctrlKey || e.metaKey) return;
 
@@ -1296,6 +1438,12 @@
       // Document dark mode toggle — "i" key
       if (e.key === 'i' || e.key === 'I') {
         toggleDocDark();
+        return;
+      }
+
+      // Auto fit page toggle — "f" key
+      if (e.key === 'f' || e.key === 'F') {
+        toggleAutoFit();
         return;
       }
 
@@ -1344,6 +1492,7 @@
     var mainViewEl = document.getElementById('main-view');
 
     mainViewEl.addEventListener('mousedown', function (e) {
+      navLock = false; // user is interacting directly — let scroll detection work
       if (!mainViewEl.classList.contains('pannable')) return;
       if (e.button !== 0) return; // left click only
       // Don't pan when the user is clicking on text — let the browser handle selection
@@ -1380,10 +1529,12 @@
       scrollTimer = setTimeout(function () {
         updateCurrentPageFromScroll();
         renderVisiblePages();
-      }, 16);
+      }, 8);
     });
 
+    // Wheel = genuine user scroll → release navLock so scroll detection resumes
     mainViewEl.addEventListener('wheel', function (e) {
+      navLock = false;
       var tab = getActiveTab();
       if (e.ctrlKey && tab && tab.totalSlides > 0) {
         e.preventDefault();

@@ -27,6 +27,69 @@ body {
   user-select: none;
 }
 
+/* Universal title bar — shown on welcome & LO screens, hidden when viewer is active */
+#universal-titlebar {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  -webkit-app-region: drag;
+  user-select: none;
+  z-index: 950;
+  position: relative;
+}
+
+#universal-titlebar.hidden {
+  display: none !important;
+}
+
+.utb-title {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 0 14px;
+  -webkit-app-region: no-drag;
+  pointer-events: none;
+}
+
+.utb-drag {
+  flex: 1;
+  height: 100%;
+  -webkit-app-region: drag;
+}
+
+.utb-controls {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+  flex-shrink: 0;
+  -webkit-app-region: no-drag;
+}
+
+.utb-controls button {
+  width: 46px;
+  height: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.utb-controls button:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+#utb-close:hover {
+  background: #c42b1c !important;
+  color: #fff !important;
+}
+
 .hidden {
   display: none !important;
 }
@@ -155,7 +218,10 @@ body {
 /* LibreOffice Screen */
 #libreoffice-screen {
   position: fixed;
-  inset: 0;
+  top: 37px;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -228,7 +294,10 @@ body {
 /* Welcome Screen */
 #welcome-screen {
   position: fixed;
-  inset: 0;
+  top: 37px;
+  left: 0;
+  right: 0;
+  bottom: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -929,6 +998,7 @@ body {
 }
 
 /* Fullscreen Mode */
+body.fullscreen #universal-titlebar,
 body.fullscreen #tab-bar,
 body.fullscreen #toolbar,
 body.fullscreen #sidebar {
@@ -1079,5 +1149,15 @@ body.fullscreen #slide-canvas {
 }
 
 .toolbar-btn.doc-dark-active:hover {
+  background: var(--accent-hover);
+}
+
+/* Active state for auto-fit toolbar button */
+.toolbar-btn.auto-fit-active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.toolbar-btn.auto-fit-active:hover {
   background: var(--accent-hover);
 }
