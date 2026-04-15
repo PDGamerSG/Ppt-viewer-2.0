@@ -5,6 +5,7 @@ const store = new Store({
     recentFiles: [],
     libreOfficePath: '',
     windowBounds: { width: 1280, height: 800 },
+    filePositions: {},
   },
 });
 
@@ -43,6 +44,26 @@ function setWindowBounds(bounds) {
   store.set('windowBounds', bounds);
 }
 
+function getFilePosition(filePath) {
+  const positions = store.get('filePositions', {});
+  return positions[filePath] || null;
+}
+
+function setFilePosition(filePath, position) {
+  const positions = store.get('filePositions', {});
+  positions[filePath] = position;
+  // Keep max 50 entries to avoid unbounded growth
+  const keys = Object.keys(positions);
+  if (keys.length > 50) {
+    // Remove oldest entries by openedAt
+    keys.sort((a, b) => (positions[a].savedAt || 0) - (positions[b].savedAt || 0));
+    for (let i = 0; i < keys.length - 50; i++) {
+      delete positions[keys[i]];
+    }
+  }
+  store.set('filePositions', positions);
+}
+
 module.exports = {
   getRecentFiles,
   addRecentFile,
@@ -50,4 +71,6 @@ module.exports = {
   setLibreOfficePath,
   getWindowBounds,
   setWindowBounds,
+  getFilePosition,
+  setFilePosition,
 };

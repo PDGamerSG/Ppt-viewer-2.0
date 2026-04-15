@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu, shell, nativeTheme } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { detectLibreOffice, convertToPdf, cleanupCache } = require('./lib/converter');
+const { detectLibreOffice, convertToPdf, prewarmLibreOffice, cleanupCache } = require('./lib/converter');
 const {
   getRecentFiles,
   addRecentFile,
@@ -9,6 +9,8 @@ const {
   setLibreOfficePath,
   getWindowBounds,
   setWindowBounds,
+  getFilePosition,
+  setFilePosition,
 } = require('./store');
 
 let mainWindow = null;
@@ -179,7 +181,15 @@ ipcMain.handle('set-libreoffice-path', (_event, p) => {
 });
 
 ipcMain.handle('read-file', async (_event, filePath) => {
-  return fs.readFileSync(filePath);
+  return fs.promises.readFile(filePath);
+});
+
+ipcMain.handle('get-file-position', (_event, filePath) => {
+  return getFilePosition(filePath);
+});
+
+ipcMain.handle('set-file-position', (_event, filePath, position) => {
+  setFilePosition(filePath, position);
 });
 
 ipcMain.handle('set-title', (_event, title) => {
@@ -208,7 +218,13 @@ ipcMain.handle('clear-cache', () => {
 });
 
 // App lifecycle
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  createWindow();
+  // Pre-warm LibreOffice in the background so the first conversion is faster
+  const customPath = getLibreOfficePath();
+  const sofficePath = detectLibreOffice(customPath);
+  prewarmLibreOffice(sofficePath);
+});
 
 app.on('window-all-closed', () => {
   app.quit();

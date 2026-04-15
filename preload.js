@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld('api', {
   getLibreOfficePath: () => ipcRenderer.invoke('get-libreoffice-path'),
   setLibreOfficePath: (p) => ipcRenderer.invoke('set-libreoffice-path', p),
   readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
+  getFilePosition: (filePath) => ipcRenderer.invoke('get-file-position', filePath),
+  setFilePosition: (filePath, position) => ipcRenderer.invoke('set-file-position', filePath, position),
   setTitle: (title) => ipcRenderer.invoke('set-title', title),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   enterFullscreen: () => ipcRenderer.invoke('enter-fullscreen'),

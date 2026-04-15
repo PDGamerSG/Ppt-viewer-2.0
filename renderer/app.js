@@ -120,6 +120,27 @@
     return filePath.replace(/\\/g, '/').split('/').pop();
   }
 
+  // ---- Persist PDF scroll position ----
+  var positionSaveTimer = null;
+
+  function saveTabPosition(tab) {
+    if (!tab || !tab.filePath || tab.loading || tab.totalSlides === 0) return;
+    var mainView = document.getElementById('main-view');
+    window.api.setFilePosition(tab.filePath, {
+      currentSlide: tab.currentSlide,
+      scrollTop: mainView ? mainView.scrollTop : 0,
+      savedAt: Date.now(),
+    });
+  }
+
+  function debouncedSavePosition() {
+    if (positionSaveTimer) clearTimeout(positionSaveTimer);
+    positionSaveTimer = setTimeout(function () {
+      var tab = getActiveTab();
+      if (tab) saveTabPosition(tab);
+    }, 1000);
+  }
+
   // ---- Document dark mode ----
   var themeToastTimeout = null;
 
@@ -381,9 +402,10 @@
   function switchTab(tabId) {
     if (activeTabId === tabId) return;
 
-    // Save outgoing tab's DOM snapshot
+    // Save outgoing tab's position and DOM snapshot
     var outgoing = getActiveTab();
     if (outgoing && !outgoing.loading) {
+      saveTabPosition(outgoing);
       var slideContainer = document.getElementById('slide-container');
       var mainView = document.getElementById('main-view');
       // Move the live DOM nodes into a DocumentFragment (cheap, no cloning)
@@ -517,6 +539,9 @@
     var idx = getTabIndex(tabId);
     if (idx === -1) return;
 
+    // Save position before closing
+    saveTabPosition(tabs[idx]);
+
     // Clean up only this tab's document
     PdfRenderer.cleanupDoc(tabId);
     tabs[idx].domSnapshot = null;
@@ -619,6 +644,19 @@
         updateZoomDisplay();
         window.api.setTitle(fileName + ' \u2014 PPT Viewer');
         await setupContinuousView(tab);
+
+        // Restore saved scroll position if available
+        var savedPos = await window.api.getFilePosition(filePath);
+        if (savedPos && savedPos.currentSlide > 1 && savedPos.currentSlide <= tab.totalSlides) {
+          tab.currentSlide = savedPos.currentSlide;
+          var wrappers = document.querySelectorAll('#slide-container .page-wrapper');
+          if (wrappers[savedPos.currentSlide - 1]) {
+            wrappers[savedPos.currentSlide - 1].scrollIntoView({ block: 'start' });
+          }
+          updateSlideCounter();
+          updateThumbnailHighlight();
+        }
+
         // Thumbnails render in background — don't block slide display
         renderAllThumbnails(tab);
       } else {
@@ -1530,6 +1568,7 @@
         updateCurrentPageFromScroll();
         renderVisiblePages();
       }, 8);
+      debouncedSavePosition();
     });
 
     // Wheel = genuine user scroll → release navLock so scroll detection resumes
@@ -1595,6 +1634,13 @@
       }
     }
   }
+
+  // Save all tab positions before window closes
+  window.addEventListener('beforeunload', function () {
+    for (var i = 0; i < tabs.length; i++) {
+      saveTabPosition(tabs[i]);
+    }
+  });
 
   // Start
   init();
