@@ -779,6 +779,26 @@
     var fitScale = getFitScale();
     var effectiveZoom = fitScale * tab.zoomLevel;
 
+    // Evict pages far outside viewport to free memory and prevent stale black canvases
+    var evictBuffer = mainView.clientHeight * 3; // evict beyond 3 screens away
+    for (var e = 0; e < wrappers.length; e++) {
+      var ew = wrappers[e];
+      var eTop = ew.offsetTop;
+      var eBottom = eTop + ew.offsetHeight;
+      var ePageNum = parseInt(ew.dataset.page);
+
+      if (eBottom < viewTop - evictBuffer || eTop > viewBottom + evictBuffer) {
+        if (renderedPages.has(ePageNum)) {
+          renderedPages.delete(ePageNum);
+          var ec = ew.querySelector('.page-canvas');
+          if (ec) { ec.width = 0; ec.height = 0; }
+          var etl = ew.querySelector('.page-text-layer');
+          if (etl) etl.innerHTML = '';
+          textLayersRendered.delete(ePageNum);
+        }
+      }
+    }
+
     // Collect pages that need rendering
     var toRender = [];
     for (var i = 0; i < wrappers.length; i++) {
