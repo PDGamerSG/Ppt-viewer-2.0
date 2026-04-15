@@ -841,7 +841,13 @@
 
             if (docDarkMode) applyDocDark();
           } catch (err) {
-            renderedPages.delete(item.pageNum);
+            // Only remove from renderedPages when this generation still owns
+            // the page.  If the generation changed, a newer renderVisiblePages
+            // call already claimed it — undoing that would cause a re-render
+            // of content that is already correct.
+            if (gen === renderGeneration) {
+              renderedPages.delete(item.pageNum);
+            }
           }
         })();
       }));
@@ -909,14 +915,36 @@
     var cssHeight = pageBaseDims.height * effectiveZoom;
 
     var wrappers = document.querySelectorAll('#slide-container .page-wrapper');
+
+    // Capture scroll anchor before resizing so we can restore the same visual
+    // position after page heights change.  slide-container uses gap:20px and
+    // padding:20px, so page i starts at 20 + i*(pageHeight+20).
+    var savedScrollTop = mainView.scrollTop;
+    var oldPageHeight = wrappers.length > 0 ? parseFloat(wrappers[0].style.height) : 0;
+
     for (var i = 0; i < wrappers.length; i++) {
       wrappers[i].style.width = cssWidth + 'px';
       wrappers[i].style.height = cssHeight + 'px';
-      // Clear rendered content so it re-renders at new zoom
+      // Stretch the existing canvas to the new CSS size so the old content
+      // remains visible (slightly blurry) instead of flashing blank.
+      // renderVisiblePages will render each page offscreen and swap in the
+      // crisp new content atomically — no blank/white flash.
       var canvas = wrappers[i].querySelector('.page-canvas');
-      canvas.width = 0;
-      canvas.height = 0;
+      canvas.style.width = cssWidth + 'px';
+      canvas.style.height = cssHeight + 'px';
       wrappers[i].querySelector('.page-text-layer').innerHTML = '';
+    }
+
+    // Restore scroll position: find which page + intra-page offset the viewport
+    // was anchored to, then translate to the new page height.
+    if (oldPageHeight > 0 && cssHeight !== oldPageHeight) {
+      var PAGE_GAP = 20;
+      var PAGE_PAD = 20;
+      var stride = oldPageHeight + PAGE_GAP;
+      var pageIndex = Math.max(0, Math.floor((savedScrollTop - PAGE_PAD) / stride));
+      var offsetInPage = savedScrollTop - PAGE_PAD - pageIndex * stride;
+      var scaledOffset = (offsetInPage / oldPageHeight) * cssHeight;
+      mainView.scrollTop = PAGE_PAD + pageIndex * (cssHeight + PAGE_GAP) + scaledOffset;
     }
 
     updatePannable();

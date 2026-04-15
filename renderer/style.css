@@ -739,7 +739,9 @@ body {
   position: relative;
   flex-shrink: 0;
   line-height: 0;
-  background: var(--bg-primary);
+  /* White background so evicted/loading pages show white instead of the dark
+     app background bleeding through the transparent blank canvas. */
+  background: #fff;
 }
 
 .page-canvas {
