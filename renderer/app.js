@@ -24,9 +24,6 @@
   // Document dark mode state
   var docDarkMode = localStorage.getItem('pptviewer-doc-dark') === 'true';
 
-  // Auto fit page state
-  var autoFitPage = localStorage.getItem('pptviewer-auto-fit') === 'true';
-
   // Global
   var isFullscreen = false;
   var fsCounterTimeout = null;
@@ -187,26 +184,30 @@
     var mainView = document.getElementById('main-view');
     var availW = mainView.clientWidth - 40;
     if (!pageBaseDims) return 1;
-    if (!autoFitPage) return availW / pageBaseDims.width;
+    var tab = getActiveTab();
+    if (!tab || !tab.autoFitPage) return availW / pageBaseDims.width;
     var availH = mainView.clientHeight - 20;
     return Math.min(availW / pageBaseDims.width, availH / pageBaseDims.height);
   }
 
   function updateAutoFitButton() {
+    var tab = getActiveTab();
+    var active = tab ? tab.autoFitPage : false;
     var btn = document.getElementById('toolbar-auto-fit');
     var menuItem = document.getElementById('hmenu-auto-fit');
     if (btn) {
-      if (autoFitPage) btn.classList.add('auto-fit-active');
+      if (active) btn.classList.add('auto-fit-active');
       else btn.classList.remove('auto-fit-active');
     }
     if (menuItem) {
-      menuItem.querySelector('.hmenu-check').textContent = autoFitPage ? '✓' : '';
+      menuItem.querySelector('.hmenu-check').textContent = active ? '✓' : '';
     }
   }
 
   function toggleAutoFit() {
-    autoFitPage = !autoFitPage;
-    localStorage.setItem('pptviewer-auto-fit', autoFitPage ? 'true' : 'false');
+    var tab = getActiveTab();
+    if (!tab) return;
+    tab.autoFitPage = !tab.autoFitPage;
     updateAutoFitButton();
     refreshView();
   }
@@ -457,6 +458,7 @@
 
     updateSlideCounter();
     updateZoomDisplay();
+    updateAutoFitButton();
     updateRotateButtons();
     window.api.setTitle(tab.fileName + ' \u2014 PPT Viewer');
 
@@ -604,6 +606,7 @@
       currentSlide: 1,
       totalSlides: 0,
       zoomLevel: 1,
+      autoFitPage: false,
       pageRotation: 0,
       thumbnailDataUrls: [],
       loading: true,
@@ -1059,9 +1062,8 @@
   function setZoom(level) {
     var tab = getActiveTab();
     if (!tab) return;
-    if (autoFitPage) {
-      autoFitPage = false;
-      localStorage.setItem('pptviewer-auto-fit', 'false');
+    if (tab.autoFitPage) {
+      tab.autoFitPage = false;
       updateAutoFitButton();
     }
     tab.zoomLevel = Math.max(0.25, Math.min(4, level));
