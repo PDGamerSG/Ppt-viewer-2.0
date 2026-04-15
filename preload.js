@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('api', {
   readFile: (filePath) => ipcRenderer.invoke('read-file', filePath),
   getFilePosition: (filePath) => ipcRenderer.invoke('get-file-position', filePath),
   setFilePosition: (filePath, position) => ipcRenderer.invoke('set-file-position', filePath, position),
+  setFilePositionSync: (filePath, position) => ipcRenderer.sendSync('set-file-position-sync', filePath, position),
   setTitle: (title) => ipcRenderer.invoke('set-title', title),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   enterFullscreen: () => ipcRenderer.invoke('enter-fullscreen'),

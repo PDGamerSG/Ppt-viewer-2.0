@@ -15,11 +15,18 @@ const {
 
 let mainWindow = null;
 
-// Extract file argument from argv
+// Extract file arguments from argv
 function findFileArg(argv) {
   return argv.find((arg) => {
     const ext = path.extname(arg).toLowerCase();
     return ext === '.pptx' || ext === '.ppt' || ext === '.pdf';
+  });
+}
+
+function findAllFileArgs(argv) {
+  return argv.filter((arg) => {
+    const ext = path.extname(arg).toLowerCase();
+    return (ext === '.pptx' || ext === '.ppt' || ext === '.pdf') && fs.existsSync(arg);
   });
 }
 
@@ -77,10 +84,10 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    // Handle CLI argument from first launch
-    const fileArg = findFileArg(process.argv);
-    if (fileArg && fs.existsSync(fileArg)) {
-      mainWindow.webContents.send('open-file', fileArg);
+    // Handle CLI arguments from first launch
+    const fileArgs = findAllFileArgs(process.argv);
+    for (const filePath of fileArgs) {
+      mainWindow.webContents.send('open-file', filePath);
     }
   });
 
@@ -194,6 +201,11 @@ ipcMain.handle('get-file-position', (_event, filePath) => {
 
 ipcMain.handle('set-file-position', (_event, filePath, position) => {
   setFilePosition(filePath, position);
+});
+
+ipcMain.on('set-file-position-sync', (event, filePath, position) => {
+  setFilePosition(filePath, position);
+  event.returnValue = true;
 });
 
 ipcMain.handle('set-title', (_event, title) => {

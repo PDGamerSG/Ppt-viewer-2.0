@@ -405,16 +405,19 @@
     // Save outgoing tab's position and DOM snapshot
     var outgoing = getActiveTab();
     if (outgoing && !outgoing.loading) {
-      saveTabPosition(outgoing);
       var slideContainer = document.getElementById('slide-container');
       var mainView = document.getElementById('main-view');
+      // Capture scroll position BEFORE moving DOM — once content is removed
+      // the browser clamps scrollTop to 0
+      var savedScrollTop = mainView.scrollTop;
+      saveTabPosition(outgoing);
       // Move the live DOM nodes into a DocumentFragment (cheap, no cloning)
       var frag = document.createDocumentFragment();
       while (slideContainer.firstChild) {
         frag.appendChild(slideContainer.firstChild);
       }
       outgoing.domSnapshot = frag;
-      outgoing.snapshotScrollTop = mainView.scrollTop;
+      outgoing.snapshotScrollTop = savedScrollTop;
     }
 
     activeTabId = tabId;
@@ -461,6 +464,10 @@
     var slideContainer = document.getElementById('slide-container');
     var mainView = document.getElementById('main-view');
 
+    // Lock scroll handler during restore — prevents updateCurrentPageFromScroll
+    // from resetting currentSlide while we're restoring the view
+    navLock = true;
+
     if (tab.domSnapshot) {
       slideContainer.innerHTML = '';
       slideContainer.appendChild(tab.domSnapshot);
@@ -480,14 +487,12 @@
       applyDocDark();
       renderVisiblePages();
     } else {
+      // setupContinuousView scrolls to tab.currentSlide before rendering
       await setupContinuousView(tab);
-
-      // Scroll to the page the user was on
-      var wrappers2 = document.querySelectorAll('#slide-container .page-wrapper');
-      if (wrappers2[tab.currentSlide - 1]) {
-        wrappers2[tab.currentSlide - 1].scrollIntoView({ block: 'start' });
-      }
     }
+
+    // Release after a short delay so the programmatic scroll settles
+    setTimeout(function () { navLock = false; }, 300);
 
     // Thumbnails AFTER main view — don't block the slide display
     if (tab.thumbnailDataUrls && tab.thumbnailDataUrls.length === tab.totalSlides) {
@@ -642,23 +647,19 @@
       // If this tab is active (or was the first), render it
       if (activeTabId === tab.id || isFirstTab) {
         activeTabId = tab.id;
+
+        // Restore saved page position BEFORE rendering so the correct
+        // region is rendered first instead of always starting at page 1
+        var savedPos = await window.api.getFilePosition(filePath);
+        if (savedPos && savedPos.currentSlide > 1 && savedPos.currentSlide <= tab.totalSlides) {
+          tab.currentSlide = savedPos.currentSlide;
+        }
+
         renderTabs();
         updateSlideCounter();
         updateZoomDisplay();
         window.api.setTitle(fileName + ' \u2014 PPT Viewer');
         await setupContinuousView(tab);
-
-        // Restore saved scroll position if available
-        var savedPos = await window.api.getFilePosition(filePath);
-        if (savedPos && savedPos.currentSlide > 1 && savedPos.currentSlide <= tab.totalSlides) {
-          tab.currentSlide = savedPos.currentSlide;
-          var wrappers = document.querySelectorAll('#slide-container .page-wrapper');
-          if (wrappers[savedPos.currentSlide - 1]) {
-            wrappers[savedPos.currentSlide - 1].scrollIntoView({ block: 'start' });
-          }
-          updateSlideCounter();
-          updateThumbnailHighlight();
-        }
 
         // Thumbnails render in background — defer to not block initial slide display
         setTimeout(function () { renderAllThumbnails(tab); }, 100);
@@ -735,6 +736,15 @@
     }
     slideContainer.innerHTML = '';
     slideContainer.appendChild(frag);
+
+    // If tab has a remembered page, scroll there BEFORE rendering
+    // so renderVisiblePages targets the correct viewport region
+    if (tab.currentSlide > 1) {
+      var targetWrapper = slideContainer.querySelector('.page-wrapper[data-page="' + tab.currentSlide + '"]');
+      if (targetWrapper) {
+        targetWrapper.scrollIntoView({ block: 'start' });
+      }
+    }
 
     updatePannable();
     await renderVisiblePages();
@@ -1722,10 +1732,16 @@
     }
   }
 
-  // Save all tab positions before window closes
+  // Save all tab positions before window closes — must be synchronous
+  // so the data persists before the process exits
   window.addEventListener('beforeunload', function () {
     for (var i = 0; i < tabs.length; i++) {
-      saveTabPosition(tabs[i]);
+      var tab = tabs[i];
+      if (!tab || !tab.filePath || tab.loading || tab.totalSlides === 0) continue;
+      window.api.setFilePositionSync(tab.filePath, {
+        currentSlide: tab.currentSlide,
+        savedAt: Date.now(),
+      });
     }
   });
 
