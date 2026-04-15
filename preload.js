@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('api', {
 
   // Events from main process
   onOpenFile: (callback) => ipcRenderer.on('open-file', (_e, filePath) => callback(filePath)),
+  onConvertProgress: (callback) => ipcRenderer.on('convert-progress', (_e, stage) => callback(stage)),
   onToggleFullscreen: (callback) => ipcRenderer.on('toggle-fullscreen', () => callback()),
   onZoomIn: (callback) => ipcRenderer.on('zoom-in', () => callback()),
   onZoomOut: (callback) => ipcRenderer.on('zoom-out', () => callback()),

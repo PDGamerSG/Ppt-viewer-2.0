@@ -152,8 +152,11 @@ ipcMain.handle('convert-file', async (_event, filePath) => {
   // PDF files need no conversion
   const ext = path.extname(filePath).toLowerCase();
   if (ext === '.pdf') {
+    mainWindow.webContents.send('convert-progress', 'loading');
     return filePath;
   }
+
+  mainWindow.webContents.send('convert-progress', 'converting');
 
   const customPath = getLibreOfficePath();
   const sofficePath = detectLibreOffice(customPath);
@@ -161,6 +164,7 @@ ipcMain.handle('convert-file', async (_event, filePath) => {
     throw new Error('LibreOffice not found');
   }
   const pdfPath = await convertToPdf(sofficePath, filePath);
+  mainWindow.webContents.send('convert-progress', 'loading');
   return pdfPath;
 });
 

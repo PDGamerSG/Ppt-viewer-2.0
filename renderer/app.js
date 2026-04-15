@@ -468,6 +468,7 @@
 
       pageBaseDims = await PdfRenderer.getPageDimensions(1, tab.pageRotation);
       renderedPages.clear();
+      textLayersRendered.clear();
       var wrappers = slideContainer.querySelectorAll('.page-wrapper');
       for (var w = 0; w < wrappers.length; w++) {
         var c = wrappers[w].querySelector('.page-canvas');
@@ -616,6 +617,7 @@
     var isFirstTab = (tabs.length === 1);
     if (isFirstTab) {
       activeTabId = tab.id;
+      if (loadingMessage) loadingMessage.textContent = 'Loading…';
       loadingOverlay.classList.remove('hidden');
     }
 
@@ -630,6 +632,7 @@
       tab.loading = false;
 
       // Load the document to get page count
+      if (loadingMessage) loadingMessage.textContent = progressMessages.rendering;
       var numPages = await PdfRenderer.loadDocument(data, tab.id);
       tab.totalSlides = numPages;
 
@@ -657,8 +660,8 @@
           updateThumbnailHighlight();
         }
 
-        // Thumbnails render in background — don't block slide display
-        renderAllThumbnails(tab);
+        // Thumbnails render in background — defer to not block initial slide display
+        setTimeout(function () { renderAllThumbnails(tab); }, 100);
       } else {
         // Background tab finished loading — just update the tab indicator
         renderTabs();
@@ -692,6 +695,7 @@
   async function setupContinuousView(tab) {
     var slideContainer = document.getElementById('slide-container');
     renderedPages.clear();
+    textLayersRendered.clear();
     renderGeneration++;
     pageBaseDims = null;
 
@@ -781,8 +785,8 @@
       }
     }
 
-    // Render pages in parallel batches of 3
-    var BATCH = 3;
+    // Render pages in parallel batches of 5
+    var BATCH = 5;
     for (var s = 0; s < toRender.length; s += BATCH) {
       if (gen !== renderGeneration) return;
       var batch = toRender.slice(s, s + BATCH);
@@ -790,10 +794,8 @@
         return (async function () {
           try {
             var canvas = item.wrapper.querySelector('.page-canvas');
-            var textLayerEl = item.wrapper.querySelector('.page-text-layer');
 
-            var offscreen = document.createElement('canvas');
-            await PdfRenderer.renderSlide(offscreen, item.pageNum, effectiveZoom, tab.pageRotation);
+            await PdfRenderer.renderSlide(canvas, item.pageNum, effectiveZoom, tab.pageRotation);
 
             // Generation changed — discard this render and allow retry
             if (gen !== renderGeneration) {
@@ -801,28 +803,22 @@
               return;
             }
 
-            // Guard: if offscreen has no content, don't blit a black rect
-            if (offscreen.width === 0 || offscreen.height === 0) {
+            // Guard: if canvas has no content, allow retry
+            if (canvas.width === 0 || canvas.height === 0) {
               renderedPages.delete(item.pageNum);
               return;
             }
 
-            canvas.width = offscreen.width;
-            canvas.height = offscreen.height;
-            canvas.style.width = offscreen.style.width;
-            canvas.style.height = offscreen.style.height;
-            var ctx = canvas.getContext('2d');
-            ctx.drawImage(offscreen, 0, 0);
-
-            await PdfRenderer.renderTextLayer(textLayerEl, item.pageNum, effectiveZoom, tab.pageRotation);
             if (docDarkMode) applyDocDark();
-            applyFindHighlights();
           } catch (err) {
             renderedPages.delete(item.pageNum);
           }
         })();
       }));
     }
+
+    // Schedule text layer rendering in background after canvases are painted
+    scheduleTextLayerRender();
   }
 
   function updateCurrentPageFromScroll() {
@@ -873,6 +869,7 @@
     if (!pageBaseDims) return;
 
     renderedPages.clear();
+    textLayersRendered.clear();
     renderGeneration++;
 
     var mainView = document.getElementById('main-view');
@@ -1061,6 +1058,80 @@
   }
 
   // ---- Find text ----
+  // ---- Lazy text layer rendering ----
+  // Text layers are expensive — defer until the user needs them (find, text select).
+  // After initial page render, we render text layers in the background with idle callbacks.
+  var textLayersRendered = new Set();
+  var textLayerIdleTimer = null;
+
+  async function ensureTextLayers() {
+    var tab = getActiveTab();
+    if (!tab || tab.totalSlides === 0) return;
+
+    var wrappers = document.querySelectorAll('#slide-container .page-wrapper');
+    var fitScale = getFitScale();
+    var effectiveZoom = fitScale * tab.zoomLevel;
+    var pending = [];
+
+    for (var i = 0; i < wrappers.length; i++) {
+      var pageNum = parseInt(wrappers[i].dataset.page);
+      if (!textLayersRendered.has(pageNum)) {
+        pending.push({ wrapper: wrappers[i], pageNum: pageNum });
+      }
+    }
+
+    for (var j = 0; j < pending.length; j++) {
+      var textLayerEl = pending[j].wrapper.querySelector('.page-text-layer');
+      if (textLayerEl) {
+        try {
+          await PdfRenderer.renderTextLayer(textLayerEl, pending[j].pageNum, effectiveZoom, tab.pageRotation);
+          textLayersRendered.add(pending[j].pageNum);
+        } catch (_) {}
+      }
+    }
+  }
+
+  // Render text layers for visible pages in background after initial render
+  function scheduleTextLayerRender() {
+    if (textLayerIdleTimer) clearTimeout(textLayerIdleTimer);
+    textLayerIdleTimer = setTimeout(function () {
+      renderVisibleTextLayers();
+    }, 500);
+  }
+
+  async function renderVisibleTextLayers() {
+    var tab = getActiveTab();
+    if (!tab || tab.totalSlides === 0 || !pageBaseDims) return;
+
+    var mainView = document.getElementById('main-view');
+    var wrappers = document.querySelectorAll('#slide-container .page-wrapper');
+    var viewTop = mainView.scrollTop;
+    var viewBottom = viewTop + mainView.clientHeight;
+    var buffer = mainView.clientHeight;
+    var fitScale = getFitScale();
+    var effectiveZoom = fitScale * tab.zoomLevel;
+
+    for (var i = 0; i < wrappers.length; i++) {
+      var wrapper = wrappers[i];
+      var wTop = wrapper.offsetTop;
+      var wBottom = wTop + wrapper.offsetHeight;
+      var pageNum = parseInt(wrapper.dataset.page);
+
+      if (wBottom >= viewTop - buffer && wTop <= viewBottom + buffer) {
+        if (!textLayersRendered.has(pageNum)) {
+          var textLayerEl = wrapper.querySelector('.page-text-layer');
+          if (textLayerEl) {
+            try {
+              await PdfRenderer.renderTextLayer(textLayerEl, pageNum, effectiveZoom, tab.pageRotation);
+              textLayersRendered.add(pageNum);
+            } catch (_) {}
+          }
+        }
+      }
+    }
+    if (findTerm) applyFindHighlights();
+  }
+
   var findTerm = '';
   var findMatches = [];
   var findCurrentIdx = -1;
@@ -1071,7 +1142,7 @@
     findInput.select();
   }
 
-  function runFind() {
+  async function runFind() {
     clearFindHighlights();
     findMatches = [];
     findCurrentIdx = -1;
@@ -1082,6 +1153,9 @@
       findInput.classList.remove('find-has-results', 'find-no-results');
       return;
     }
+
+    // Ensure all text layers are rendered before searching
+    await ensureTextLayers();
 
     var term = findTerm.toLowerCase();
     var spans = document.querySelectorAll('.page-text-layer span');
@@ -1264,6 +1338,19 @@
   }
 
   // ---- Event Listeners ----
+  var loadingMessage = document.getElementById('loading-message');
+  var progressMessages = {
+    converting: 'Converting presentation…',
+    loading: 'Loading PDF…',
+    rendering: 'Rendering slides…',
+  };
+
+  window.api.onConvertProgress(function (stage) {
+    if (loadingMessage && progressMessages[stage]) {
+      loadingMessage.textContent = progressMessages[stage];
+    }
+  });
+
   function setupEventListeners() {
     // Window controls (viewer tab bar)
     document.getElementById('win-minimize').addEventListener('click', function () { window.api.windowMinimize(); });
