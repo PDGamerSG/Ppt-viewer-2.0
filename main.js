@@ -11,6 +11,8 @@ const {
   setWindowBounds,
   getFilePosition,
   setFilePosition,
+  getSession,
+  setSession,
 } = require('./store');
 
 let mainWindow = null;
@@ -84,11 +86,6 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show();
-    // Handle CLI arguments from first launch
-    const fileArgs = findAllFileArgs(process.argv);
-    for (const filePath of fileArgs) {
-      mainWindow.webContents.send('open-file', filePath);
-    }
   });
 
   mainWindow.on('resize', () => {
@@ -205,6 +202,20 @@ ipcMain.handle('set-file-position', (_event, filePath, position) => {
 
 ipcMain.on('set-file-position-sync', (event, filePath, position) => {
   setFilePosition(filePath, position);
+  event.returnValue = true;
+});
+
+// Returns CLI file args so the renderer can handle startup opening
+ipcMain.handle('get-startup-files', () => {
+  return findAllFileArgs(process.argv);
+});
+
+ipcMain.handle('get-session', () => {
+  return getSession();
+});
+
+ipcMain.on('set-session-sync', (event, session) => {
+  setSession(session);
   event.returnValue = true;
 });
 

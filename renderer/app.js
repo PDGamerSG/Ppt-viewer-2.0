@@ -229,6 +229,29 @@
     }, 1200);
   }
 
+  // ---- Session restore ----
+  function restoreSession(session) {
+    var files = session.files || [];
+    if (files.length === 0) return;
+
+    for (var i = 0; i < files.length; i++) {
+      openFile(files[i]);
+    }
+
+    // After all queued opens complete, switch to the tab that was active last session
+    var activeFilePath = session.activeFilePath;
+    if (activeFilePath) {
+      openFileQueue.then(function () {
+        for (var i = 0; i < tabs.length; i++) {
+          if (tabs[i].filePath === activeFilePath) {
+            switchTab(tabs[i].id);
+            return;
+          }
+        }
+      });
+    }
+  }
+
   // ---- Init ----
   async function init() {
     var loPath = await window.api.detectLibreOffice();
@@ -243,6 +266,19 @@
     loadRecentFiles();
     setupEventListeners();
     updateAutoFitButton();
+
+    // Open CLI files if provided, otherwise restore last session
+    var startupFiles = await window.api.getStartupFiles();
+    if (startupFiles && startupFiles.length > 0) {
+      for (var i = 0; i < startupFiles.length; i++) {
+        openFile(startupFiles[i]);
+      }
+    } else if (libreOfficeReady) {
+      var session = await window.api.getSession();
+      if (session && session.files && session.files.length > 0) {
+        restoreSession(session);
+      }
+    }
   }
 
   var universalTitlebar = document.getElementById('universal-titlebar');
@@ -1782,9 +1818,13 @@
     }
   }
 
-  // Save all tab positions before window closes — must be synchronous
+  // Save all tab positions and open session before window closes — must be synchronous
   // so the data persists before the process exits
   window.addEventListener('beforeunload', function () {
+    var sessionFiles = [];
+    var activeFilePath = null;
+    var activeTab = getActiveTab();
+
     for (var i = 0; i < tabs.length; i++) {
       var tab = tabs[i];
       if (!tab || !tab.filePath || tab.loading || tab.totalSlides === 0) continue;
@@ -1792,7 +1832,16 @@
         currentSlide: tab.currentSlide,
         savedAt: Date.now(),
       });
+      sessionFiles.push(tab.filePath);
+      if (activeTab && tab.id === activeTab.id) {
+        activeFilePath = tab.filePath;
+      }
     }
+
+    window.api.setSessionSync({
+      files: sessionFiles,
+      activeFilePath: activeFilePath,
+    });
   });
 
   // Start

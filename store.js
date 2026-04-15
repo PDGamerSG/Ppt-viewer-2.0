@@ -64,6 +64,14 @@ function setFilePosition(filePath, position) {
   store.set('filePositions', positions);
 }
 
+function getSession() {
+  return store.get('session', null);
+}
+
+function setSession(session) {
+  store.set('session', session);
+}
+
 module.exports = {
   getRecentFiles,
   addRecentFile,
@@ -73,4 +81,6 @@ module.exports = {
   setWindowBounds,
   getFilePosition,
   setFilePosition,
+  getSession,
+  setSession,
 };
