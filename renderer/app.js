@@ -235,7 +235,7 @@
     if (files.length === 0) return;
 
     for (var i = 0; i < files.length; i++) {
-      openFile(files[i]);
+      openFile(files[i], { focus: false });
     }
 
     // After all queued opens complete, switch to the tab that was active last session
@@ -613,20 +613,22 @@
   }
 
   // ---- File opening ----
-  function openFile(filePath) {
-    var task = openFileQueue.then(function () { return doOpenFile(filePath); });
+  function openFile(filePath, options) {
+    var task = openFileQueue.then(function () { return doOpenFile(filePath, options); });
     openFileQueue = task.catch(function () {});
     return task;
   }
 
-  async function doOpenFile(filePath) {
+  async function doOpenFile(filePath, options) {
+    options = options || {};
+    var focusNewTab = options.focus !== false;
     var ext = filePath.split('.').pop().toLowerCase();
     var isPdf = (ext === 'pdf');
     if (!isPdf && !libreOfficeReady) return;
 
     for (var i = 0; i < tabs.length; i++) {
       if (tabs[i].filePath === filePath) {
-        switchTab(tabs[i].id);
+        if (focusNewTab) switchTab(tabs[i].id);
         return;
       }
     }
@@ -655,15 +657,38 @@
 
     tabs.push(tab);
     showViewer();
-    renderTabs();
 
-    // Only show full-page loading overlay if this is the only/active tab
     var isFirstTab = (tabs.length === 1);
-    if (isFirstTab) {
+    var willFocus = focusNewTab || isFirstTab;
+
+    // Snapshot the outgoing tab's DOM so switching back is instant
+    if (willFocus && !isFirstTab && activeTabId !== null && activeTabId !== tab.id) {
+      var outgoing = getActiveTab();
+      if (outgoing && !outgoing.loading) {
+        var outSlideContainer = document.getElementById('slide-container');
+        var outMainView = document.getElementById('main-view');
+        var savedScrollTop = outMainView.scrollTop;
+        saveTabPosition(outgoing);
+        var frag = document.createDocumentFragment();
+        while (outSlideContainer.firstChild) frag.appendChild(outSlideContainer.firstChild);
+        outgoing.domSnapshot = frag;
+        outgoing.snapshotScrollTop = savedScrollTop;
+      }
+    }
+
+    if (willFocus) {
       activeTabId = tab.id;
+      // Clear previous tab's view so loading overlay shows over an empty container
+      document.getElementById('slide-container').innerHTML = '';
+      thumbnailList.innerHTML = '';
+      toolbarPageInput.value = '';
+      toolbarPageTotal.textContent = '…';
       if (loadingMessage) loadingMessage.textContent = 'Loading…';
       loadingOverlay.classList.remove('hidden');
+      window.api.setTitle(fileName + ' (loading) — PPT Viewer');
     }
+
+    renderTabs();
 
     try {
       var pdfPath = await window.api.convertFile(filePath);
@@ -719,7 +744,7 @@
 
       showError(err.message || String(err));
     } finally {
-      if (isFirstTab) {
+      if (willFocus && activeTabId === tab.id) {
         loadingOverlay.classList.add('hidden');
       }
     }

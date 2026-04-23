@@ -1,7 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu, shell, nativeTheme } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { detectLibreOffice, convertToPdf, prewarmLibreOffice, cleanupCache } = require('./lib/converter');
+const { detectLibreOffice, convertToPdf, prewarmLibreOffice, cleanupCache, pruneCache } = require('./lib/converter');
 const {
   getRecentFiles,
   addRecentFile,
@@ -247,6 +247,9 @@ ipcMain.handle('clear-cache', () => {
 // App lifecycle
 app.whenReady().then(() => {
   createWindow();
+  // Prune stale cache entries but preserve recent ones so reopening a
+  // previously-converted file skips LibreOffice on next launch
+  pruneCache();
   // Pre-warm LibreOffice in the background so the first conversion is faster
   const customPath = getLibreOfficePath();
   const sofficePath = detectLibreOffice(customPath);
@@ -255,10 +258,6 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   app.quit();
-});
-
-app.on('before-quit', () => {
-  cleanupCache();
 });
 
 app.on('activate', () => {
